@@ -64,7 +64,7 @@ def generate_ultimate_database():
       "Sootopolis City",
       "Pacifidlog Town",
       "Ever Grande City",
-      # Sinnoh
+      "Sinnoh",
       "Twinleaf Town",
       "Sandgem Town",
       "Jubilife City",
@@ -81,7 +81,7 @@ def generate_ultimate_database():
       "Fight Area",
       "Survival Area",
       "Resort Area",
-      # Unova
+      "Unova",
       "Aspertia City",
       "Floccesy Town",
       "Nuvema Town",
@@ -100,7 +100,7 @@ def generate_ultimate_database():
       "Humilau City",
       "Lacunosa Town",
       "Icirrus City",
-      # Kalos
+      "Kalos",
       "Vaniville Town",
       "Aquacorde Town",
       "Santalune City",
@@ -116,7 +116,7 @@ def generate_ultimate_database():
       "Couriway Town",
       "Snowbelle City",
       "Kiloude City",
-      # Alola
+      "Alola",
       "Iki Town",
       "Hau'oli City",
       "Heahea City",
@@ -126,7 +126,7 @@ def generate_ultimate_database():
       "Tapu Village",
       "Seafolk Village",
       "Exeggutor Island",
-      # Galar
+      "Galar",
       "Postwick",
       "Wedgehurst",
       "Motostoke",
@@ -140,7 +140,7 @@ def generate_ultimate_database():
       "Wyndon",
       "Armor Station",
       "Freezington",
-      # Paldea
+      "Paldea",
       "Mesagoza",
       "Casseroya",
       "Los Platos",
