@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokeHints - Game Room</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-image: radial-gradient(#2a2a2a 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* Top Bar / Game Info */
+        .room-header {
+            background: #111;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #333;
+        }
+
+        .room-title {
+            font-size: 1.2rem;
+            color: #ffcc00;
+            font-weight: bold;
+        }
+
+        /* Main Game Layout Container */
+        .game-container {
+            display: flex;
+            flex: 1;
+            padding: 20px;
+            gap: 20px;
+            justify-content: space-between;
+            overflow-y: auto;
+        }
+
+        /* Center Grid for Hint Logs / Words (1-40 Columns) */
+        .word-grid-section {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            align-content: start;
+        }
+
+        .grid-item {
+            display: flex;
+            height: 45px;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .grid-number {
+            background-color: #ffcc00;
+            color: #000;
+            width: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            clip-path: polygon(0 0, 85% 0, 100% 50%, 85% 100%, 0 100%);
+        }
+
+        .grid-text {
+            background-color: #e6e6e6;
+            color: #111;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            padding-left: 15px;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        /* Status colors for grid texts */
+        .grid-item.solved .grid-text { background-color: #d4edda; color: #155724; }
+        .grid-item.active .grid-text { background-color: #fff3cd; color: #856404; }
+        .grid-item.empty .grid-text { background-color: #6c757d; color: #ccc; }
+
+        /* Right Sidebar (Target Words 1-10) */
+        .right-sidebar {
+            width: 280px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #111;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #333;
+        }
+
+        .sidebar-title {
+            font-size: 1rem;
+            color: #ffcc00;
+            text-align: center;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .target-item {
+            display: flex;
+            height: 40px;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .target-number {
+            background-color: #ffcc00;
+            color: #000;
+            width: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            clip-path: polygon(0 0, 80% 0, 100% 50%, 80% 100%, 0 100%);
+        }
+
+        .target-text {
+            background-color: #ffffff;
+            color: #000;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            padding-left: 12px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        /* Bottom Player Bar */
+        .player-bar-container {
+            background: #111;
+            padding: 15px 20px;
+            display: flex;
+            gap: 20px;
+            border-top: 2px solid #333;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .player-card {
+            position: relative;
+            background: #2a2a2a;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            width: 220px;
+            height: 60px;
+            border: 2px solid #444;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Guesser Live Answer Box styling */
+        .player-guess-box {
+            position: relative;
+            background: #ffffff;
+            color: #000;
+            width: 110px;
+            height: 35px;
+            margin-right: 10px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: bold;
+            border: 2px solid #555;
+            overflow: hidden;
+            transition: background-color 0.3s ease;
+        }
+
+        /* Correct Answer State (Gold) */
+        .player-guess-box.correct {
+            background-color: #ffcc00;
+            border-color: #e6b800;
+            color: #000;
+        }
+
+        /* Small "close" tag in the corner when penalty/locked rules apply */
+        .guess-status-tag {
+            position: absolute;
+            bottom: 1px;
+            right: 3px;
+            font-size: 0.55rem;
+            color: #d9534f;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+
+        .player-card.hinter {
+            border-color: #ffcc00;
+        }
+
+        /* Crown for the Hinter */
+        .crown-icon {
+            position: absolute;
+            top: -22px;
+            left: 15px;
+            font-size: 1.5rem;
+            display: none;
+        }
+
+        .player-card.hinter .crown-icon {
+            display: block;
+        }
+
+        .action-bar {
+            background: #151515;
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            border-top: 2px solid #333;
+        }
+
+        #guessForm {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        #wordInput {
+            flex: 1;
+            background: #222;
+            border: 2px solid #444;
+            border-radius: 6px;
+            padding: 10px 15px;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #wordInput:focus {
+            border-color: #ffcc00;
+        }
+
+        #submitBtn {
+            background-color: #ffcc00;
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            padding: 0 20px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+
+        #submitBtn:hover {
+            background-color: #e6b800;
+        }
+
+        .player-avatar-box {
+            width: 60px;
+            height: 100%;
+            background: #333;
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .player-info {
+            flex: 1;
+            padding: 0 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .player-name-display {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .player-score-display {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffcc00;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header info -->
+    <div class="room-header">
+        <div class="room-title">PokeHints | Lobby Code: <span style="color:#fff;">{{ room_code }}</span></div>
+        <div>Status: <span style="color: #28a745; font-weight:bold;">{{ room.status | upper }}</span></div>
+    </div>
+
+    <!-- Main Game Screen Layout -->
+    <div class="game-container">
+        
+        <!-- Left/Center 40-Word Dynamic Grid -->
+        <div class="word-grid-section" id="wordGrid">
+            <!-- Dynamically populated via loop for items 1 to 40 -->
+            <script>
+                for (let i = 1; i <= 40; i++) {
+                    let statusClass = "empty";
+                    let sampleText = "";
+                    if (i === 1) { statusClass = "solved"; sampleText = "fire"; }
+                    else if (i === 2) { statusClass = "active"; sampleText = "dizzy"; }
+
+                    document.write(`
+                        <div class="grid-item ${statusClass}">
+                            <div class="grid-number">${i}</div>
+                            <div class="grid-text">${sampleText}</div>
+                        </div>
+                    `);
+                }
+            </script>
+
+            <script>
+                function submitAction(event) {
+                    event.preventDefault();
+                    const inputField = document.getElementById('wordInput');
+                    const guessValue = inputField.value.trim();
+                    if (!guessValue) return;
+
+                    // Clear input field after submit
+                    inputField.value = '';
+
+                    // Example client-side simulation logic (this will later connect to your backend/Flask routes)
+                    // You can check against active game state here
+                    console.log("Submitted guess:", guessValue);
+                }
+                </script>
+        </div>
+
+        <!-- Guess Input Form (Visible only to Guessers) -->
+        {% if not is_hinter %}
+        <div class="guess-input-container" style="padding: 15px; text-align: center;">
+            <form id="guessForm" onsubmit="submitGuess(event)" style="display: flex; gap: 10px; justify-content: center;">
+                <input type="text" id="guessInput" list="pokemonList" placeholder="Type your guess..." autocomplete="off" style="padding: 10px; width: 300px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff;">
+                <button type="submit" style="padding: 10px 20px; background: #ffcc00; color: #000; font-weight: bold; border: none; border-radius: 6px; cursor: pointer;">Guess</button>
+            </form>
+            
+            <!-- Autocomplete datalist using our master word database -->
+            <datalist id="pokemonList">
+                {% for word in valid_words %}
+                <option value="{{ word }}">
+                {% endfor %}
+            </datalist>
+        </div>
+        {% endif %}
+
+        <script>
+        let activeGridBox = 1; // Tracks which grid box to fill next
+
+        function submitGuess(event) {
+            event.preventDefault();
+            const inputField = document.getElementById('guessInput');
+            const guessValue = inputField.value.trim();
+            if (!guessValue) return;
+
+            // Send guess to Flask backend
+            fetch('/room/{{ room_code }}/guess', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ guess: guessValue })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.error || "Error submitting guess");
+                    return;
+                }
+
+                // Target the next available box on the grid
+                const box = document.getElementById(`box-${activeGridBox}`);
+                if (box) {
+                    box.textContent = data.guess;
+                    if (data.correct) {
+                        // Turn gold on correct guess!
+                        box.style.background = '#ffcc00';
+                        box.style.color = '#000';
+                        box.style.borderColor = '#e6b800';
+                        
+                        if (data.round_complete) {
+                            alert("All 10 words solved! Great job team!");
+                        }
+                    } else {
+                        // Incorrect guess styling (white/gray)
+                        box.style.background = '#222';
+                        box.style.color = '#fff';
+                    }
+                    activeGridBox++;
+                }
+
+                // Clear input for next guess
+                inputField.value = '';
+            })
+            .catch(error => console.error('Error:', error));
+        }
+        </script>
+
+        <!-- Right Sidebar: Target Words (Visible ONLY to the Hinter) -->
+        <div class="right-sidebar">
+            {% if is_hinter %}
+                <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleTargetList()">
+                    <div class="sidebar-title" style="margin-bottom: 0;">Target Words (Secret)</div>
+                    <button id="toggleBtn" style="background: none; border: none; color: #ffcc00; font-size: 1rem; cursor: pointer;">▲</button>
+                </div>
+                <div id="targetListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+                    {% for target in target_words %}
+                    <div class="target-item" style="display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">{{ loop.index }}</span>
+                            <span class="target-text" style="color: #fff; font-weight: 500;">{{ target }}</span>
+                        </div>
+                        <!-- Status indicator for solved/unsolved -->
+                        <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: #333; color: #aaa;">Unsolved</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="sidebar-title">Game Status</div>
+                <div style="color: #888; font-size: 0.9rem; text-align: center; margin-top: 20px; line-height: 1.4;">
+                    🤫 You are a <b>Guesser</b>.<br><br>Listen to the Hinter's clues and type your guesses below!
+                </div>
+            {% endif %}
+        </div>
+
+        <script>
+            // Toggle function to fold up or expand the target list for the hinter
+            function toggleTargetList() {
+                const container = document.getElementById('targetListContainer');
+                const btn = document.getElementById('toggleBtn');
+                if (container.style.display === 'none') {
+                    container.style.display = 'flex';
+                    btn.textContent = '▲';
+                } else {
+                    container.style.display = 'none';
+                    btn.textContent = '▼';
+                }
+            }
+        </script>
+    
+
+    </div>
+
+    <!-- Input Action Bar for Hinter / Guessers -->
+    <div class="action-bar">
+        <form id="guessForm" onsubmit="submitAction(event)">
+            <input 
+                type="text" 
+                id="wordInput" 
+                name="guess" 
+                placeholder="{% if is_hinter %}Type your hint word...{% else %}Guess the Pokémon, character, or item...{% endif %}" 
+                list="pokeList" 
+                autocomplete="off"
+                required
+            >
+            <!-- Native HTML5 Datalist for Auto-suggestions -->
+            <datalist id="pokeList">
+                {% for word in valid_words %}
+                <option value="{{ word }}">
+                {% endfor %}
+            </datalist>
+            <button type="submit" id="submitBtn">Submit</button>
+        </form>
+    </div>
+
+    <div class="player-bar-container">
+    {% for player in room.players %}
+    <div class="player-card {% if player.is_hinter %}hinter{% endif %}" id="player-card-{{ loop.index }}">
+        <div class="crown-icon">👑</div>
+        <div class="player-avatar-box">
+            👤
+        </div>
+        <div class="player-info">
+            <span class="player-name-display">{{ player.name }}</span>
+            <span class="player-score-display">{{ player.score }}</span>
+        </div>
+        <!-- Guesser Live Answer Badge/Box -->
+        {% if not player.is_hinter %}
+        <div class="player-guess-box" id="guess-box-{{ loop.index }}">
+            <span class="guess-text">Waiting...</span>
+            <span class="guess-status-tag" style="display: none;">close</span>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+</body>
+</html>

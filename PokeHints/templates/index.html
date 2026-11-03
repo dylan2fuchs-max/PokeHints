@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokeHints - Home</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-image: radial-gradient(#2a2a2a 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .main-container {
+            background: #111;
+            padding: 40px;
+            border-radius: 12px;
+            border: 2px solid #333;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            text-align: center;
+        }
+
+        h1 {
+            color: #ffcc00;
+            font-size: 2.5rem;
+            margin-bottom: 25px;
+            letter-spacing: 2px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            background: #222;
+            border: 2px solid #444;
+            border-radius: 6px;
+            padding: 12px;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: #ffcc00;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        button {
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .btn-public {
+            background-color: #28a745;
+            color: #fff;
+        }
+        .btn-public:hover { background-color: #218838; }
+
+        .btn-host {
+            background-color: #ffcc00;
+            color: #000;
+        }
+        .btn-host:hover { background-color: #e6b800; }
+
+        .btn-join {
+            background-color: #17a2b8;
+            color: #fff;
+        }
+        .btn-join:hover { background-color: #138496; }
+
+        .divider {
+            margin: 20px 0;
+            border-bottom: 1px solid #333;
+            position: relative;
+        }
+        .divider span {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #111;
+            padding: 0 10px;
+            color: #666;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <h1>PokeHints</h1>
+
+        <!-- Combined form inputs or individual sections -->
+        <div class="form-group">
+            <label for="playerName">Trainer Name</label>
+            <input type="text" id="playerName" name="player_name" placeholder="Enter your trainer name..." required>
+        </div>
+
+        <div class="action-buttons">
+            <!-- 1. Join Public Lobby -->
+            <form action="{{ url_for('join_public_lobby') }}" method="POST" id="publicForm">
+                <input type="hidden" name="player_name" id="hiddenPublicName">
+                <button type="submit" class="btn-public" onclick="prepareSubmit('publicForm', 'hiddenPublicName')">Join Public Lobby</button>
+            </form>
+
+            <!-- 2. Host Private Lobby Page -->
+            <form action="{{ url_for('host_private_lobby') }}" method="GET" id="hostForm">
+                <button type="submit" class="btn-host">Host Private Lobby</button>
+            </form>
+
+            <div class="divider"><span>OR JOIN PRIVATE</span></div>
+
+            <!-- 3. Join Private Lobby with Code -->
+            <form action="{{ url_for('join_private_lobby') }}" method="POST" id="joinForm" style="display: flex; flex-direction: column; gap: 10px;">
+                <input type="hidden" name="player_name" id="hiddenJoinName">
+                <input type="text" name="room_code" placeholder="Enter 7-Digit Code..." style="text-transform: uppercase;" required>
+                <button type="submit" class="btn-join" onclick="prepareSubmit('joinForm', 'hiddenJoinName')">Join Private Lobby</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Helper to pass the trainer name input into whichever form button is clicked
+        function prepareSubmit(formId, hiddenInputId) {
+            const nameValue = document.getElementById('playerName').value.trim();
+            if (nameValue) {
+                document.getElementById(hiddenInputId).value = nameValue;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -37,7 +37,7 @@ def generate_ultimate_database():
       "Fuchsia City",
       "Cinnabar Island",
       "Indigo Plateau",
-      # Johto
+      "Johto",
       "New Bark Town",
       "Cherrygrove City",
       "Violet City",
@@ -48,7 +48,7 @@ def generate_ultimate_database():
       "Olivine City",
       "Mahogany Town",
       "Blackthorn City",
-      # Hoenn
+      "Hoenn",
       "Littleroot Town",
       "Oldale Town",
       "Petalburg City",
