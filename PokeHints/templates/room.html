@@ -322,8 +322,6 @@
                 for (let i = 1; i <= 40; i++) {
                     let statusClass = "empty";
                     let sampleText = "";
-                    if (i === 1) { statusClass = "solved"; sampleText = "fire"; }
-                    else if (i === 2) { statusClass = "active"; sampleText = "dizzy"; }
 
                     document.write(`
                         <div class="grid-item ${statusClass}">
@@ -507,5 +505,50 @@
     {% endfor %}
 </div>
 
+<script>
+    const roomCode = "{{ room_code }}";
+    let initialStatus = "{{ room.status }}";
+
+    // Periodic Polling to sync player list & status changes live as players join
+    setInterval(async () => {
+        try {
+            let response = await fetch(`/room/${roomCode}/api/status`);
+            if (!response.ok) return;
+            
+            let data = await response.json();
+
+            // If status changed from waiting to in_game (room filled up), reload to load roles & targets
+            if (initialStatus === "waiting" && data.status === "in_game") {
+                window.location.reload();
+                return;
+            }
+
+            // Dynamically update the player bar container as people join
+            let playerContainer = document.getElementById("playerContainer");
+            if (playerContainer && data.players) {
+                playerContainer.innerHTML = data.players.map((p, idx) => `
+                    <div class="player-card ${p.is_hinter ? 'hinter' : ''}" id="player-card-${idx + 1}">
+                        <div class="crown-icon">👑</div>
+                        <div class="player-avatar-box">👤</div>
+                        <div class="player-info" style="display: flex; flex-direction: column;">
+                            <span class="player-name-display" style="font-weight: bold; font-size: 0.9rem;">${p.name}</span>
+                            <span class="player-score-display" style="color: #ffcc00; font-size: 0.8rem;">Score: ${p.score}</span>
+                        </div>
+                        ${!p.is_hinter ? `<div class="player-guess-box" style="margin-left: auto; font-size: 0.8rem; color: #888;">Waiting...</div>` : ''}
+                    </div>
+                `).join('');
+            }
+
+            // Update status text in header
+            let statusDisplay = document.getElementById("roomStatusDisplay");
+            if (statusDisplay) {
+                statusDisplay.textContent = data.status.toUpperCase();
+            }
+
+        } catch (err) {
+            console.error("Error polling room status:", err);
+        }
+    }, 2000); // Check every 2 seconds
+</script>
 </body>
 </html>
