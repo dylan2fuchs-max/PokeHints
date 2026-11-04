@@ -167,6 +167,21 @@ def join_private_lobby():
 
   return redirect(url_for("game_room", room_code=room_code))
 
+@app.route("/room/<room_code>/api/status")
+def room_status(room_code):
+    """API endpoint for client polling to sync player joins and game status."""
+    if room_code not in LOBBIES:
+        return jsonify({"error": "Room not found"}), 404
+
+    room = LOBBIES[room_code]
+    return jsonify({
+        "status": room["status"],
+        "players": room["players"],
+        "max_players": room["max_players"],
+        "host": room.get("host"),
+        "current_word_index": room.get("current_word_index", 0)
+    })
+
 @app.route("/room/<room_code>/guess", methods=["POST"])
 def submit_guess(room_code):
   """Receives a player's guess, validates it against the active target word."""
