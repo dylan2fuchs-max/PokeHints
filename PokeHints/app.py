@@ -2,6 +2,7 @@ import json
 import os
 import random
 import string
+import uuid
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 app = Flask(__name__)
@@ -28,6 +29,23 @@ else:
 # In-memory storage for lobbies
 LOBBIES = {}
 PUBLIC_QUEUE = []
+
+# Inside join_public_lobby, host_private_lobby, and join_private_lobby:
+player_id = str(uuid.uuid4())
+
+player_data = {
+    "id": player_id,  # Unique ID for session tracking
+    "name": player_name,
+    "icon": player_icon,
+    "score": 0,
+    "is_hinter": False,
+    "has_been_hinter": False,
+}
+
+room["players"].append(player_data)
+session["room_code"] = room_code
+session["player_name"] = player_name
+session["player_id"] = player_id  # Save unique ID in session
 
 
 def generate_lobby_code():
@@ -230,31 +248,29 @@ def submit_guess(room_code):
 
 @app.route("/room/<room_code>")
 def game_room(room_code):
-  """Unified controller for room state, roles, and target words."""
-  if room_code not in LOBBIES:
-    return redirect(url_for("index"))
+    if room_code not in LOBBIES:
+        return redirect(url_for("index"))
 
-  room = LOBBIES[room_code]
-  current_user = session.get("player_name")
+    room = LOBBIES[room_code]
+    current_player_id = session.get("player_id")
 
-  # Determine if current user is the active hinter
-  is_hinter = False
-  for player in room["players"]:
-    if player["name"] == current_user and player.get("is_hinter", False):
-      is_hinter = True
-      break
+    # Determine if current session user is the active hinter by unique ID
+    is_hinter = False
+    for player in room["players"]:
+        if player.get("id") == current_player_id and player.get("is_hinter", False):
+            is_hinter = True
+            break
 
-  # Grab target words if the game has started, otherwise show placeholders
-  target_words = room.get("target_words", ["Waiting for players..."] * 10)
+    target_words = room.get("target_words", ["Waiting for players..."] * 10)
 
-  return render_template(
-      "room.html",
-      room=room,
-      room_code=room_code,
-      is_hinter=is_hinter,
-      target_words=target_words,
-      valid_words=MASTER_POKEMON_DATABASE,
-  )
+    return render_template(
+        "room.html",
+        room=room,
+        room_code=room_code,
+        is_hinter=is_hinter,
+        target_words=target_words,
+        valid_words=MASTER_POKEMON_DATABASE,
+    )
 
 
 if __name__ == "__main__":
