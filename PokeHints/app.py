@@ -30,24 +30,6 @@ else:
 LOBBIES = {}
 PUBLIC_QUEUE = []
 
-# Inside join_public_lobby, host_private_lobby, and join_private_lobby:
-player_id = str(uuid.uuid4())
-
-player_data = {
-    "id": player_id,  # Unique ID for session tracking
-    "name": player_name,
-    "icon": player_icon,
-    "score": 0,
-    "is_hinter": False,
-    "has_been_hinter": False,
-}
-
-room["players"].append(player_data)
-session["room_code"] = room_code
-session["player_name"] = player_name
-session["player_id"] = player_id  # Save unique ID in session
-
-
 def generate_lobby_code():
   """Generates a random 7-digit alphanumeric code for private lobbies."""
   characters = string.ascii_uppercase + string.digits
@@ -81,38 +63,40 @@ def index():
 
 @app.route("/lobby/public", methods=["POST"])
 def join_public_lobby():
-  """Handles matching players into public lobbies (4 players max per room)."""
-  player_name = request.form.get("player_name", "Trainer")
-  player_icon = request.form.get("player_icon", "default")
+    """Handles matching players into public lobbies (4 players max per room)."""
+    player_name = request.form.get("player_name", "Trainer")
+    player_icon = request.form.get("player_icon", "default")
+    player_id = str(uuid.uuid4())  # Generate unique ID
 
-  public_room_id = "PUBLIC_MAIN"
-  if public_room_id not in LOBBIES:
-    LOBBIES[public_room_id] = {
-        "host": "Server",
-        "players": [],
-        "rounds": 1,
-        "max_players": 4,
-        "status": "waiting",
-    }
+    public_room_id = "PUBLIC_MAIN"
+    if public_room_id not in LOBBIES:
+        LOBBIES[public_room_id] = {
+            "host": "Server",
+            "players": [],
+            "rounds": 1,
+            "max_players": 4,
+            "status": "waiting",
+        }
 
-  room = LOBBIES[public_room_id]
-  if len(room["players"]) < room["max_players"]:
-    player_data = {
-        "name": player_name,
-        "icon": player_icon,
-        "score": 0,
-        "is_hinter": False,
-        "has_been_hinter": False,
-    }
-    room["players"].append(player_data)
-    session["room_code"] = public_room_id
-    session["player_name"] = player_name
+    room = LOBBIES[public_room_id]
+    if len(room["players"]) < room["max_players"]:
+        player_data = {
+            "id": player_id,  # Ensure 'id' matches what game_room expects
+            "name": player_name,
+            "icon": player_icon,
+            "score": 0,
+            "is_hinter": False,
+            "has_been_hinter": False,
+        }
+        room["players"].append(player_data)
+        session["room_code"] = public_room_id
+        session["player_name"] = player_name
+        session["player_id"] = player_id  # Save in session
 
-    # Once full, trigger randomized game start
-    if len(room["players"]) == room["max_players"]:
-      start_game_session(room)
+        if len(room["players"]) == room["max_players"]:
+            start_game_session(room)
 
-  return redirect(url_for("game_room", room_code=public_room_id))
+    return redirect(url_for("game_room", room_code=public_room_id))
 
 
 @app.route("/lobby/host", methods=["GET", "POST"])
@@ -151,42 +135,44 @@ def host_private_lobby():
     return render_template("host_lobby.html")
 
 
+import uuid
+
 @app.route("/lobby/join", methods=["POST"])
 def join_private_lobby():
-  """Allows a user to join an existing private lobby using a code."""
-  room_code = request.form.get("room_code", "").strip().upper()
-  player_name = request.form.get("player_name", "Trainer")
-  player_icon = request.form.get("player_icon", "default")
+    """Allows a user to join an existing private lobby using a code."""
+    room_code = request.form.get("room_code", "").strip().upper()
+    # This captures the custom name passed from your index.html form!
+    player_name = request.form.get("player_name", "").strip() or "Trainer"
+    player_icon = request.form.get("player_icon", "default")
+    player_id = str(uuid.uuid4())
 
-  if room_code not in LOBBIES:
-    return (
-        "Lobby not found! Please check the code and try again.",
-        404,
-    )
+    if room_code not in LOBBIES:
+        return "Lobby not found! Please check the code and try again.", 404
 
-  room = LOBBIES[room_code]
-  if len(room["players"]) >= room["max_players"]:
-    return "Lobby is full!", 400
+    room = LOBBIES[room_code]
+    if len(room["players"]) >= room["max_players"]:
+        return "Lobby is full!", 400
 
-  if room["status"] != "waiting":
-    return "Game has already started!", 400
+    if room["status"] != "waiting":
+        return "Game has already started!", 400
 
-  room["players"].append({
-      "name": player_name,
-      "icon": player_icon,
-      "score": 0,
-      "is_hinter": False,
-      "has_been_hinter": False,
-  })
+    room["players"].append({
+        "id": player_id,
+        "name": player_name,
+        "icon": player_icon,
+        "score": 0,
+        "is_hinter": False,
+        "has_been_hinter": False,
+    })
 
-  session["room_code"] = room_code
-  session["player_name"] = player_name
+    session["room_code"] = room_code
+    session["player_name"] = player_name
+    session["player_id"] = player_id
 
-  # If this join fills the private lobby up to max capacity, start the game!
-  if len(room["players"]) == room["max_players"]:
-    start_game_session(room)
+    if len(room["players"]) == room["max_players"]:
+        start_game_session(room)
 
-  return redirect(url_for("game_room", room_code=room_code))
+    return redirect(url_for("game_room", room_code=room_code))
 
 @app.route("/room/<room_code>/api/status")
 def room_status(room_code):
