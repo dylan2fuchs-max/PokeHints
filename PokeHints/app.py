@@ -37,22 +37,27 @@ def generate_lobby_code():
 
 
 def start_game_session(room):
-  """Initializes the game when full: picks a random hinter and 10 target words."""
-  players = room["players"]
-  if not players:
-    return
+    """Initializes the game when full: picks a random hinter and 10 target words."""
+    players = room["players"]
+    if not players:
+        return
 
-  # Randomly pick the first hinter
-  hinter_idx = random.randint(0, len(players) - 1)
-  for i, p in enumerate(players):
-    p["is_hinter"] = (i == hinter_idx)
-    p["has_been_hinter"] = (i == hinter_idx)
+    # Randomly pick exactly ONE hinter index
+    hinter_idx = random.randint(0, len(players) - 1)
+    
+    for i, p in enumerate(players):
+        # Explicitly set True only for the chosen index, and False for everyone else
+        if i == hinter_idx:
+            p["is_hinter"] = True
+            p["has_been_hinter"] = True
+        else:
+            p["is_hinter"] = False
 
-  room["target_words"] = random.sample(
-      MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE))
-  )
-  room["current_word_index"] = 0
-  room["status"] = "in_game"
+    room["target_words"] = random.sample(
+        MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE))
+    )
+    room["current_word_index"] = 0
+    room["status"] = "in_game"
 
 
 @app.route("/")
@@ -122,6 +127,7 @@ def host_private_lobby():
                 "is_hinter": False,
                 "has_been_hinter": False,
             }],
+
             "rounds": rounds,
             "max_players": max_players,
             "status": "waiting",
@@ -133,9 +139,6 @@ def host_private_lobby():
         return redirect(url_for("game_room", room_code=room_code))
 
     return render_template("host_lobby.html")
-
-
-import uuid
 
 @app.route("/lobby/join", methods=["POST"])
 def join_private_lobby():
@@ -249,11 +252,11 @@ def game_room(room_code):
     room = LOBBIES[room_code]
     current_player_id = session.get("player_id")
 
-    # Determine if current session user is the active hinter by unique ID
+    # Match the session ID directly to the player dictionary entry
     is_hinter = False
     for player in room["players"]:
-        if player.get("id") == current_player_id and player.get("is_hinter", False):
-            is_hinter = True
+        if player.get("id") == current_player_id:
+            is_hinter = player.get("is_hinter", False)
             break
 
     target_words = room.get("target_words", ["Waiting for players..."] * 10)

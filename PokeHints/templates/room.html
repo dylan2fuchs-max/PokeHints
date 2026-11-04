@@ -304,7 +304,7 @@
         }
     </style>
 </head>
-<body>
+<body data-is-hinter="{{ 'true' if is_hinter else 'false' }}">
 
     <!-- Header info -->
     <div class="room-header">
@@ -490,8 +490,9 @@
 <script>
     const roomCode = "{{ room_code }}";
     let initialStatus = "{{ room.status }}";
+    let isCurrentHinter = document.body.dataset.isHinter === 'true';
 
-    // Periodic Polling to sync player list & status changes live as players join
+    // Periodic Polling to sync player list & game state live
     setInterval(async () => {
         try {
             let response = await fetch(`/room/${roomCode}/api/status`);
@@ -499,38 +500,43 @@
             
             let data = await response.json();
 
-            // If status changed from waiting to in_game (room filled up), reload to load roles & targets
-            if (initialStatus === "waiting" && data.status === "in_game") {
-                window.location.reload();
-                return;
-            }
-
-            // Dynamically update the player bar container as people join
-            let playerContainer = document.getElementById("playerContainer");
-            if (playerContainer && data.players) {
-                playerContainer.innerHTML = data.players.map((p, idx) => `
-                    <div class="player-card ${p.is_hinter ? 'hinter' : ''}" id="player-card-${idx + 1}">
-                        <div class="crown-icon">👑</div>
-                        <div class="player-avatar-box">👤</div>
-                        <div class="player-info" style="display: flex; flex-direction: column;">
-                            <span class="player-name-display" style="font-weight: bold; font-size: 0.9rem;">${p.name}</span>
-                            <span class="player-score-display" style="color: #ffcc00; font-size: 0.8rem;">Score: ${p.score}</span>
-                        </div>
-                        ${!p.is_hinter ? `<div class="player-guess-box" style="margin-left: auto; font-size: 0.8rem; color: #888;">Waiting...</div>` : ''}
-                    </div>
-                `).join('');
-            }
-
-            // Update status text in header
+            // If game just started, update status text dynamically
             let statusDisplay = document.getElementById("roomStatusDisplay");
             if (statusDisplay) {
                 statusDisplay.textContent = data.status.toUpperCase();
             }
 
+            // Dynamically update the player bar container as people join/play
+            let playerContainer = document.querySelector(".player-bar-container");
+            if (playerContainer && data.players) {
+                playerContainer.innerHTML = data.players.map((p, idx) => `
+                    <div class="player-card ${p.is_hinter ? 'hinter' : ''}" id="player-card-${idx + 1}">
+                        <div class="crown-icon">👑</div>
+                        <div class="player-avatar-box">👤</div>
+                        <div class="player-info">
+                            <span class="player-name-display">${p.name}</span>
+                            <span class="player-score-display">${p.score}</span>
+                        </div>
+                        ${!p.is_hinter ? `
+                        <div class="player-guess-box" id="guess-box-${idx + 1}">
+                            <span class="guess-text">Waiting...</span>
+                            <span class="guess-status-tag" style="display: none;">close</span>
+                        </div>` : ''}
+                    </div>
+                `).join('');
+            }
+
+            // If the status changed to in_game and we haven't re-synced roles yet, 
+            // a single clean reload ensures the server-side Jinja templates (is_hinter) 
+            // match the newly assigned roles precisely.
+            if (initialStatus === "waiting" && data.status === "in_game") {
+                window.location.reload();
+            }
+
         } catch (err) {
             console.error("Error polling room status:", err);
         }
-    }, 2000); // Check every 2 seconds
+    }, 2000); // Polls every 2 seconds only while waiting/playing
 </script>
 </body>
 </html>
