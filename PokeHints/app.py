@@ -117,35 +117,38 @@ def join_public_lobby():
 
 @app.route("/lobby/host", methods=["GET", "POST"])
 def host_private_lobby():
-  """Allows a user to configure and host a private game lobby."""
-  if request.method == "POST":
-    custom_code = request.form.get("room_code", "").strip().upper()
-    room_code = custom_code if custom_code else generate_lobby_code()
+    """Allows a user to configure and host a private game lobby."""
+    if request.method == "POST":
+        custom_code = request.form.get("room_code", "").strip().upper()
+        room_code = custom_code if custom_code else generate_lobby_code()
 
-    max_players = int(request.form.get("max_players", 4))
-    rounds = int(request.form.get("rounds", 1))
-    host_name = request.form.get("player_name", "HostTrainer")
-    player_icon = request.form.get("player_icon", "default")
+        max_players = int(request.form.get("max_players", 4))
+        rounds = int(request.form.get("rounds", 1))
+        host_name = request.form.get("player_name", "HostTrainer")
+        player_icon = request.form.get("player_icon", "default")
+        player_id = str(uuid.uuid4())
 
-    LOBBIES[room_code] = {
-        "host": host_name,
-        "players": [{
-            "name": host_name,
-            "icon": player_icon,
-            "score": 0,
-            "is_hinter": False,
-            "has_been_hinter": False,
-        }],
-        "rounds": rounds,
-        "max_players": max_players,
-        "status": "waiting",
-    }
+        LOBBIES[room_code] = {
+            "host": host_name,
+            "players": [{
+                "id": player_id,
+                "name": host_name,
+                "icon": player_icon,
+                "score": 0,
+                "is_hinter": False,
+                "has_been_hinter": False,
+            }],
+            "rounds": rounds,
+            "max_players": max_players,
+            "status": "waiting",
+        }
 
-    session["room_code"] = room_code
-    session["player_name"] = host_name
-    return redirect(url_for("game_room", room_code=room_code))
+        session["room_code"] = room_code
+        session["player_name"] = host_name
+        session["player_id"] = player_id
+        return redirect(url_for("game_room", room_code=room_code))
 
-  return render_template("host_lobby.html")
+    return render_template("host_lobby.html")
 
 
 @app.route("/lobby/join", methods=["POST"])
@@ -202,48 +205,54 @@ def room_status(room_code):
 
 @app.route("/room/<room_code>/guess", methods=["POST"])
 def submit_guess(room_code):
-  """Receives a player's guess, validates it against the active target word."""
-  if room_code not in LOBBIES:
-    return jsonify({"success": False, "error": "Room not found"}), 404
+    """Receives a player's guess, validates it against the active target word."""
+    if room_code not in LOBBIES:
+        return jsonify({"success": False, "error": "Room not found"}), 404
 
-  room = LOBBIES[room_code]
-  current_user = session.get("player_name")
-  data = request.get_json() or {}
-  guessed_word = data.get("guess", "").strip()
+    room = LOBBIES[room_code]
+    current_player_id = session.get("player_id")
 
-  if not guessed_word:
-    return jsonify({"success": False, "error": "Empty guess"})
+    # Prevent the active Hinter from submitting guesses
+    for player in room["players"]:
+        if player.get("id") == current_player_id and player.get("is_hinter", False):
+            return jsonify({"success": False, "error": "Hinters cannot submit guesses!"}), 400
 
-  # Find current target word
-  target_words = room.get("target_words", [])
-  current_idx = room.get("current_word_index", 0)
+    data = request.get_json() or {}
+    guessed_word = data.get("guess", "").strip()
 
-  if current_idx >= len(target_words):
-    return jsonify(
-        {"success": False, "error": "All words have been guessed!"}
-    )
+    if not guessed_word:
+        return jsonify({"success": False, "error": "Empty guess"})
 
-  active_target = target_words[current_idx]
+    # Find current target word
+    target_words = room.get("target_words", [])
+    current_idx = room.get("current_word_index", 0)
 
-  # Check if guess matches the active target word (case-insensitive)
-  is_correct = guessed_word.lower() == active_target.lower()
+    if current_idx >= len(target_words):
+        return jsonify(
+            {"success": False, "error": "All words have been guessed!"}
+        )
 
-  response_data = {
-      "success": True,
-      "correct": is_correct,
-      "guess": guessed_word,
-  }
+    active_target = target_words[current_idx]
 
-  if is_correct:
-    # Increment to the next target word
-    room["current_word_index"] += 1
-    response_data["next_word_index"] = room["current_word_index"]
+    # Check if guess matches the active target word (case-insensitive)
+    is_correct = guessed_word.lower() == active_target.lower()
 
-    # Check if all 10 words are completed
-    if room["current_word_index"] >= len(target_words):
-      response_data["round_complete"] = True
+    response_data = {
+        "success": True,
+        "correct": is_correct,
+        "guess": guessed_word,
+    }
 
-  return jsonify(response_data)
+    if is_correct:
+        # Increment to the next target word
+        room["current_word_index"] += 1
+        response_data["next_word_index"] = room["current_word_index"]
+
+        # Check if all 10 words are completed
+        if room["current_word_index"] >= len(target_words):
+            response_data["round_complete"] = True
+
+    return jsonify(response_data)
 
 
 @app.route("/room/<room_code>")
