@@ -258,6 +258,12 @@ def room_status(room_code):
         return jsonify({"error": "Room not found"}), 404
 
     room = LOBBIES[room_code]
+
+    # WATCHDOG GUARD: If room is waiting but has reached max capacity, force start it right now!
+    if room["status"] == "waiting" and len(room["players"]) >= room["max_players"]:
+        print(f"[WATCHDOG] Room '{room_code}' is full ({len(room['players'])}/{room['max_players']}) but still waiting. Forcing game start!")
+        start_game_session(room, room_code)
+
     return jsonify({
         "status": room["status"],
         "players": room["players"],
@@ -322,7 +328,6 @@ def submit_guess(room_code):
     return jsonify(response_data)
 
 
-@app.route("/room/<room_code>")
 def game_room(room_code):
     if room_code not in LOBBIES:
         return redirect(url_for("index"))
@@ -330,12 +335,23 @@ def game_room(room_code):
     room = LOBBIES[room_code]
     current_player_id = session.get("player_id")
 
-    # Match the session ID directly to the player dictionary entry
     is_hinter = False
+    found_player = None
+
+    # Find the player matching the session ID
     for player in room["players"]:
         if player.get("id") == current_player_id:
+            found_player = player
             is_hinter = player.get("is_hinter", False)
             break
+
+    # FALLBACK SAFETY: If session ID isn't found in the room (e.g. shared tab cross-contamination),
+    # assign the visitor to the first player who isn't already claimed, or default to Guesser.
+    if not found_player and room["players"]:
+        # Default to the last joined player if session is missing
+        found_player = room["players"][-1]
+        session["player_id"] = found_player["id"]
+        is_hinter = found_player.get("is_hinter", False)
 
     target_words = room.get("target_words", ["Waiting for players..."] * 10)
 
@@ -347,7 +363,6 @@ def game_room(room_code):
         target_words=target_words,
         valid_words=MASTER_POKEMON_DATABASE,
     )
-
 
 if __name__ == "__main__":
   app.run(host="0.0.0.0", port=5000, debug=True)

@@ -311,7 +311,10 @@
     <!-- Header info -->
     <div class="room-header">
         <div class="room-title">PokeHints | Lobby Code: <span style="color:#fff;">{{ room_code }}</span></div>
-        <div>Status: <span style="color: #28a745; font-weight:bold;">{{ room.status | upper }}</span></div>
+        <div style="display: flex; gap: 15px; align-items: center; font-size: 0.9rem;">
+            <span style="color: #aaa;">Trainer: <b style="color: #ffcc00;">{{ session.get('player_name', 'Trainer') }}</b></span>
+            <div>Status: <span id="roomStatusDisplay" style="color: #28a745; font-weight:bold;">{{ room.status | upper }}</span></div>
+        </div>
     </div>
 
     <!-- Main Game Screen Layout -->
@@ -491,6 +494,7 @@
 
 <script>
     const roomCode = "{{ room_code }}";
+    let initialStatus = "{{ room.status }}";
     
     if (typeof window.lastWordIndex === 'undefined') {
         window.lastWordIndex = 0;
@@ -534,17 +538,10 @@
             let statusDisplay = document.getElementById("roomStatusDisplay");
             if (statusDisplay) {
                 statusDisplay.textContent = data.status.toUpperCase();
-            }
-
-            // CRITICAL FIX: If backend says "in_game", but our current page rendered before it started 
-            // (or didn't reload yet), force an immediate reload so roles and target words load properly!
-            const bodyIsHinter = document.body.dataset.isHinter === 'true';
-            // Check if any player in the fetched data is marked as hinter for our session, 
-            // or if the server status is "in_game" but we need the server-rendered template to match roles.
-            if (data.status === "in_game") {
-                // If the header status or layout still looks like it's waiting, reload to pull the hinter template
-                const headerStatus = document.querySelector(".room-header div span:last-child");
-                if (headerStatus && headerStatus.textContent.toLowerCase() === "waiting") {
+                
+                // CRITICAL FIX: If the page loaded while waiting, but the server is now "in_game", 
+                // force an immediate reload so the server evaluates `is_hinter` and renders the Hinter screen!
+                if (initialStatus === "waiting" && data.status === "in_game") {
                     window.location.reload();
                     return;
                 }
