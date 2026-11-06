@@ -42,23 +42,70 @@ def start_game_session(room):
     if not players:
         return
 
-    # Randomly pick exactly ONE hinter index
+    # Reset tracking flags for all players
+    for p in players:
+        p["has_been_hinter"] = False
+        p["is_hinter"] = False
+
+    # Randomly pick exactly ONE hinter index to start
     hinter_idx = random.randint(0, len(players) - 1)
-    
-    for i, p in enumerate(players):
-        # Explicitly set True only for the chosen index, and False for everyone else
-        if i == hinter_idx:
-            p["is_hinter"] = True
-            p["has_been_hinter"] = True
-        else:
-            p["is_hinter"] = False
+    players[hinter_idx]["is_hinter"] = True
+    players[hinter_idx]["has_been_hinter"] = True
 
     room["target_words"] = random.sample(
         MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE))
     )
     room["current_word_index"] = 0
+    room["current_round"] = 1
     room["status"] = "in_game"
 
+def rotate_hinter_or_advance_round(room):
+    """Rotates to the next hinter who hasn't been one yet in this round cycle.
+       If all players have been hinter, starts a new round or ends the game.
+    """
+    players = room["players"]
+    
+    # Reset current hinter flags
+    for p in players:
+        p["is_hinter"] = False
+
+    # Find players who haven't been a hinter yet in this cycle
+    eligible_players = [p for p in players if not p.get("has_been_hinter", False)]
+
+    if eligible_players:
+        # Pick the next hinter from eligible players
+        next_hinter = random.choice(eligible_players)
+        next_hinter["is_hinter"] = True
+        next_hinter["has_been_hinter"] = True
+        
+        # Load new target words for the next hinter's turn
+        room["target_words"] = random.sample(
+            MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE))
+        )
+        room["current_word_index"] = 0
+    else:
+        # Everyone has been a hinter once this round! Check round limits.
+        current_round = room.get("current_round", 1)
+        max_rounds = room.get("rounds", 1)
+
+        if current_round < max_rounds:
+            # Advance to next round, reset hinter tracking for everyone, keep scores intact!
+            room["current_round"] = current_round + 1
+            for p in players:
+                p["has_been_hinter"] = False
+            
+            # Pick the first new hinter for the new round
+            first_hinter = random.choice(players)
+            first_hinter["is_hinter"] = True
+            first_hinter["has_been_hinter"] = True
+
+            room["target_words"] = random.sample(
+                MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE))
+            )
+            room["current_word_index"] = 0
+        else:
+            # Game Over - All rounds completed
+            room["status"] = "game_over"
 
 @app.route("/")
 def index():
@@ -71,7 +118,7 @@ def join_public_lobby():
     """Handles matching players into public lobbies (4 players max per room)."""
     player_name = request.form.get("player_name", "Trainer")
     player_icon = request.form.get("player_icon", "default")
-    player_id = str(uuid.uuid4())  # Generate unique ID
+    player_id = str(uuid.uuid4())
 
     public_room_id = "PUBLIC_MAIN"
     if public_room_id not in LOBBIES:
@@ -86,7 +133,7 @@ def join_public_lobby():
     room = LOBBIES[public_room_id]
     if len(room["players"]) < room["max_players"]:
         player_data = {
-            "id": player_id,  # Ensure 'id' matches what game_room expects
+            "id": player_id,
             "name": player_name,
             "icon": player_icon,
             "score": 0,
@@ -96,7 +143,7 @@ def join_public_lobby():
         room["players"].append(player_data)
         session["room_code"] = public_room_id
         session["player_name"] = player_name
-        session["player_id"] = player_id  # Save in session
+        session["player_id"] = player_id
 
         if len(room["players"]) == room["max_players"]:
             start_game_session(room)
@@ -189,6 +236,7 @@ def room_status(room_code):
         "players": room["players"],
         "max_players": room["max_players"],
         "host": room.get("host"),
+        "current_round": room.get("current_round", 1),
         "current_word_index": room.get("current_word_index", 0)
     })
 
@@ -237,9 +285,12 @@ def submit_guess(room_code):
         room["current_word_index"] += 1
         response_data["next_word_index"] = room["current_word_index"]
 
-        # Check if all 10 words are completed
+        # Check if all 10 words are completed for this hinter's turn
         if room["current_word_index"] >= len(target_words):
             response_data["round_complete"] = True
+            # Automatically rotate to the next hinter or advance round/end game
+            rotate_hinter_or_advance_round(room)
+            response_data["game_status"] = room["status"]
 
     return jsonify(response_data)
 

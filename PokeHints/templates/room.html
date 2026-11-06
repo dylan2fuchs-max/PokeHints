@@ -490,7 +490,14 @@
 <script>
     const roomCode = "{{ room_code }}";
     let initialStatus = "{{ room.status }}";
-    let isCurrentHinter = document.body.dataset.isHinter === 'true';
+    
+    // Initialize window tracking variables safely to 0/1 without relying on Jinja dictionary lookups
+    if (typeof window.lastWordIndex === 'undefined') {
+        window.lastWordIndex = 0;
+    }
+    if (typeof window.lastRound === 'undefined') {
+        window.lastRound = 1;
+    }
 
     // Periodic Polling to sync player list & game state live
     setInterval(async () => {
@@ -500,13 +507,36 @@
             
             let data = await response.json();
 
-            // If game just started, update status text dynamically
+            // Set initial baseline on first poll tick if not set
+            if (window.lastWordIndex === 0 && data.current_word_index > 0) {
+                window.lastWordIndex = data.current_word_index;
+            }
+            if (window.lastRound === 1 && data.current_round > 1) {
+                window.lastRound = data.current_round;
+            }
+
+            // 1. Handle Game Over state
+            if (data.status === "game_over") {
+                alert("Game Over! All rounds are complete. Final scores are locked in!");
+                window.location.href = "/";
+                return;
+            }
+
+            // 2. Detect if a Hinter rotation happened (word index reset to 0) or Round advanced
+            if (data.status === "in_game") {
+                if (data.current_word_index < window.lastWordIndex || data.current_round > window.lastRound) {
+                    window.location.reload();
+                    return;
+                }
+            }
+
+            // Update status text in header
             let statusDisplay = document.getElementById("roomStatusDisplay");
             if (statusDisplay) {
                 statusDisplay.textContent = data.status.toUpperCase();
             }
 
-            // Dynamically update the player bar container as people join/play
+            // Dynamically update the player bar container as people play/score
             let playerContainer = document.querySelector(".player-bar-container");
             if (playerContainer && data.players) {
                 playerContainer.innerHTML = data.players.map((p, idx) => `
@@ -515,20 +545,17 @@
                         <div class="player-avatar-box">👤</div>
                         <div class="player-info">
                             <span class="player-name-display">${p.name}</span>
-                            <span class="player-score-display">${p.score}</span>
+                            <span class="player-score-display">Score: ${p.score}</span>
                         </div>
                         ${!p.is_hinter ? `
                         <div class="player-guess-box" id="guess-box-${idx + 1}">
                             <span class="guess-text">Waiting...</span>
-                            <span class="guess-status-tag" style="display: none;">close</span>
                         </div>` : ''}
                     </div>
                 `).join('');
             }
 
-            // If the status changed to in_game and we haven't re-synced roles yet, 
-            // a single clean reload ensures the server-side Jinja templates (is_hinter) 
-            // match the newly assigned roles precisely.
+            // If game just transitioned from waiting to in_game
             if (initialStatus === "waiting" && data.status === "in_game") {
                 window.location.reload();
             }
@@ -536,7 +563,7 @@
         } catch (err) {
             console.error("Error polling room status:", err);
         }
-    }, 2000); // Polls every 2 seconds only while waiting/playing
+    }, 2000); // Polls every 2 seconds
 </script>
 </body>
 </html>
