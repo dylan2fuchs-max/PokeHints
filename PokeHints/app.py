@@ -164,6 +164,10 @@ def host_private_lobby():
         player_icon = request.form.get("player_icon", "default")
         player_id = str(uuid.uuid4())
 
+        # DEBUG: Print host setup parameters
+        print(f"--- HOSTING PRIVATE LOBBY ({room_code}) ---")
+        print(f"Max Players Set: {max_players} | Rounds: {rounds}")
+
         LOBBIES[room_code] = {
             "host": host_name,
             "players": [{
@@ -191,7 +195,6 @@ def host_private_lobby():
 def join_private_lobby():
     """Allows a user to join an existing private lobby using a code."""
     room_code = request.form.get("room_code", "").strip().upper()
-    # This captures the custom name passed from your index.html form!
     player_name = request.form.get("player_name", "").strip() or "Trainer"
     player_icon = request.form.get("player_icon", "default")
     player_id = str(uuid.uuid4())
@@ -200,6 +203,11 @@ def join_private_lobby():
         return "Lobby not found! Please check the code and try again.", 404
 
     room = LOBBIES[room_code]
+    
+    # DEBUG: Print join status
+    print(f"--- PLAYER JOINING ({room_code}) ---")
+    print(f"Current Players: {len(room['players'])} / Max Players: {room['max_players']}")
+
     if len(room["players"]) >= room["max_players"]:
         return "Lobby is full!", 400
 
@@ -219,7 +227,10 @@ def join_private_lobby():
     session["player_name"] = player_name
     session["player_id"] = player_id
 
+    print(f"After append -> Total Players: {len(room['players'])} | Target Max: {room['max_players']}")
+
     if len(room["players"]) == room["max_players"]:
+        print(">>> ROOM IS FULL! Starting game session...")
         start_game_session(room)
 
     return redirect(url_for("game_room", room_code=room_code))
