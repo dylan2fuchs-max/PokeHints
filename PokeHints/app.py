@@ -328,7 +328,8 @@ def submit_guess(room_code):
     return jsonify(response_data)
 
 
-def game_room(room_code):
+@app.route("/room/<room_code>")
+def game_room(room_code):  # <-- Must be named 'game_room' so url_for("game_room") can find it!
     if room_code not in LOBBIES:
         return redirect(url_for("index"))
 
@@ -336,22 +337,10 @@ def game_room(room_code):
     current_player_id = session.get("player_id")
 
     is_hinter = False
-    found_player = None
-
-    # Find the player matching the session ID
     for player in room["players"]:
         if player.get("id") == current_player_id:
-            found_player = player
             is_hinter = player.get("is_hinter", False)
             break
-
-    # FALLBACK SAFETY: If session ID isn't found in the room (e.g. shared tab cross-contamination),
-    # assign the visitor to the first player who isn't already claimed, or default to Guesser.
-    if not found_player and room["players"]:
-        # Default to the last joined player if session is missing
-        found_player = room["players"][-1]
-        session["player_id"] = found_player["id"]
-        is_hinter = found_player.get("is_hinter", False)
 
     target_words = room.get("target_words", ["Waiting for players..."] * 10)
 
