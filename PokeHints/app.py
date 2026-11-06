@@ -68,6 +68,53 @@ def start_game_session(room, room_code):
     print(f"🎯 Target Words Loaded: {len(room['target_words'])} words")
     print(f"========================================\n")
 
+def init_game_grid(room):
+    """Initializes the 40-box grid and target tracking for a new hinter turn."""
+    room["hint_boxes"] = ["" for _ in range(40)]  # 40 sequential hint boxes
+    room["current_box_index"] = 0                 # Tracks next available box (0 to 39)
+    room["solved_words"] = []                     # Stores successfully solved words in numeric order
+    room["current_word_index"] = 0                # Index of the active target word (0 to 9)
+
+def calculate_hinter_score(boxes_used):
+    """
+    Calculates hinter points based on box efficiency out of 25 baseline:
+    - <= 5 boxes: +20 pts
+    - 6 to 24 boxes: Scaled or tiered (e.g. 15 boxes = +10 pts)
+    - 25 boxes: 0 pts
+    - > 25 boxes: -1 pt for every box over 25 (max -15 pts at 40 boxes)
+    """
+    if boxes_used <= 5:
+        return 20
+    elif boxes_used == 25:
+        return 0
+    elif boxes_used < 25:
+        # Linear scale between 5 boxes (+20) and 25 boxes (0)
+        # 20 points spread across 20 boxes = 1 point per box saved under 25
+        return 25 - boxes_used
+    else:
+        # Over 25 boxes: lose 1 point per box over 25
+        overage = boxes_used - 25
+        return -overage
+
+def add_hint_to_grid(room, hint_phrase):
+    """Adds a hint phrase into the sequential 40-box grid if space permits."""
+    box_idx = room.get("current_box_index", 0)
+    if box_idx < 40:
+        room["hint_boxes"][box_idx] = hint_phrase
+        room["current_box_index"] = box_idx + 1
+        return True
+    return False # Grid is full (all 40 boxes used)
+
+def finalize_hinter_turn(room, hinter_player):
+    """Calculates efficiency score at the end of 10 words and awards it to the hinter."""
+    boxes_used = room.get("current_box_index", 40)
+    earned_points = calculate_hinter_score(boxes_used)
+    
+    hinter_player["score"] += earned_points
+    print(f"[SCORING] Hinter '{hinter_player['name']}' used {boxes_used} boxes. Awarded {earned_points} points.")
+    
+    return earned_points
+
 def rotate_hinter_or_advance_round(room):
     """Rotates to the next hinter who hasn't been one yet in this round cycle.
        If all players have been hinter, starts a new round or ends the game.
@@ -270,7 +317,9 @@ def room_status(room_code):
         "max_players": room["max_players"],
         "host": room.get("host"),
         "current_round": room.get("current_round", 1),
-        "current_word_index": room.get("current_word_index", 0)
+        "current_word_index": room.get("current_word_index", 0),
+        "hint_boxes": room.get("hint_boxes", [""] * 40),
+        "solved_words": room.get("solved_words", [])
     })
 
 @app.route("/room/<room_code>/guess", methods=["POST"])
@@ -314,18 +363,66 @@ def submit_guess(room_code):
     }
 
     if is_correct:
+        # Append to solved words list for sidebar display
+        if active_target not in room.get("solved_words", []):
+            room.setdefault("solved_words", []).append(active_target)
+
         # Increment to the next target word
         room["current_word_index"] += 1
         response_data["next_word_index"] = room["current_word_index"]
-
-        # Check if all 10 words are completed for this hinter's turn
-        if room["current_word_index"] >= len(target_words):
-            response_data["round_complete"] = True
             # Automatically rotate to the next hinter or advance round/end game
             rotate_hinter_or_advance_round(room)
             response_data["game_status"] = room["status"]
 
     return jsonify(response_data)
+
+@app.route("/room/<room_code>/hint", methods=["POST"])
+def submit_hint(room_code):
+    """Receives a hinter's hint phrase, validates whole-word constraints, and adds to grid."""
+    if room_code not in LOBBIES:
+        return jsonify({"success": False, "error": "Room not found"}), 404
+
+    room = LOBBIES[room_code]
+    current_player_id = session.get("player_id")
+
+    # Verify current player is the hinter
+    current_hinter = None
+    for player in room["players"]:
+        if player.get("id") == current_player_id and player.get("is_hinter", True):
+            current_hinter = player
+            break
+
+    if not current_hinter:
+        return jsonify({"success": False, "error": "Only the active Hinter can submit hints!"}), 403
+
+    hint_phrase = request.form.get("hint", "").strip()
+    if not hint_phrase:
+        return jsonify({"success": False, "message": "Hint cannot be empty."})
+
+    # Whole-word constraint check against the active target word
+    target_words = room.get("target_words", [])
+    current_idx = room.get("current_word_index", 0)
+
+    if current_idx < len(target_words):
+        active_target = target_words[current_idx].lower()
+        # Split hint and target into words to enforce whole-word check (not partial letters)
+        hint_words = set(hint_phrase.lower().split())
+        target_words_list = set(active_target.split())
+
+        # Check if any whole word from the hint matches any whole word in the target
+        intersection = hint_words.intersection(target_words_list)
+        if intersection:
+            return jsonify({
+                "success": False, 
+                "message": f"Invalid hint! '{list(intersection)[0]}' is part of the active target word."
+            })
+
+    # Add hint into the 40-box grid sequentially
+    added = add_hint_to_grid(room, hint_phrase)
+    if not added:
+        return jsonify({"success": False, "message": "All 40 hint boxes are full!"})
+
+    return jsonify({"success": True})
 
 
 @app.route("/room/<room_code>")

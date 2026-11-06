@@ -322,20 +322,18 @@
         
         <!-- Left/Center 40-Word Dynamic Grid -->
         <div class="word-grid-section" id="wordGrid">
-            <!-- Dynamically populated via loop for items 1 to 40 -->
             <script>
+                // Render 40 boxes initially (will be updated dynamically via polling)
                 for (let i = 1; i <= 40; i++) {
-                    let statusClass = "empty";
-                    let sampleText = "";
-
                     document.write(`
-                        <div class="grid-item ${statusClass}">
+                        <div class="grid-item empty" id="grid-box-${i}">
                             <div class="grid-number">${i}</div>
-                            <div class="grid-text">${sampleText}</div>
+                            <div class="grid-text"></div>
                         </div>
                     `);
                 }
             </script>
+        </div>
 
             <script>
                 function submitAction(event) {
@@ -358,11 +356,6 @@
         let activeGridBox = 1; // Tracks which grid box to fill next
 
         function submitGuess(event) {
-            event.preventDefault();
-            const inputField = document.getElementById('guessInput');
-            const guessValue = inputField.value.trim();
-            if (!guessValue) return;
-
             // Send guess to Flask backend
             fetch('/room/{{ room_code }}/guess', {
                 method: 'POST',
@@ -424,9 +417,12 @@
                     {% endfor %}
                 </div>
             {% else %}
-                <div class="sidebar-title">Game Status</div>
-                <div style="color: #888; font-size: 0.9rem; text-align: center; margin-top: 20px; line-height: 1.4;">
-                    🤫 You are a <b>Guesser</b>.<br><br>Listen to the Hinter's clues and type your guesses below!
+                <div class="sidebar-title">Solved Words</div>
+                <div id="solvedWordsContainer" style="margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 250px; overflow-y: auto;">
+                    <!-- Solved words populate here dynamically -->
+                </div>
+                <div style="color: #888; font-size: 0.85rem; text-align: center; margin-top: 15px; line-height: 1.3;">
+                    🤫 You are a <b>Guesser</b>.<br>Listen to clues and type your guesses below!
                 </div>
             {% endif %}
         </div>
@@ -503,6 +499,46 @@
         window.lastRound = 1;
     }
 
+    async function submitAction(event) {
+        event.preventDefault();
+        const inputField = document.getElementById('wordInput');
+        const value = inputField.value.trim();
+        if (!value) return;
+
+        // Read the hinter flag safely from the body's dataset attribute
+        const isHinter = document.body.dataset.isHinter === 'true';
+        const endpoint = isHinter ? `/room/${roomCode}/hint` : `/room/${roomCode}/guess`;
+
+        try {
+            let response = await fetch(endpoint, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                // Send JSON or form data based on what the endpoint expects
+                body: isHinter ? `hint=${encodeURIComponent(value)}` : `guess=${encodeURIComponent(value)}`
+            });
+
+            let result = await response.json();
+            if (response.ok) {
+                inputField.value = ''; // Clear input on success
+                if (isHinter) {
+                    if (!result.success) {
+                        alert(result.message || "Invalid hint! Please choose another word.");
+                    }
+                } else {
+                    if (result.penalty) {
+                        alert("Penalty! -1 point for guessing out of turn or double guessing.");
+                    }
+                }
+            } else {
+                alert(result.error || "Action failed.");
+            }
+        } catch (err) {
+            console.error("Error submitting action:", err);
+        }
+    }
+
     // Periodic Polling to sync player list & game state live
     setInterval(async () => {
         try {
@@ -545,6 +581,36 @@
                     window.location.reload();
                     return;
                 }
+            }
+
+            // Update the 40-box hint grid dynamically
+            if (data.hint_boxes) {
+                data.hint_boxes.forEach((hintText, index) => {
+                    let boxNum = index + 1;
+                    let boxElement = document.getElementById(`grid-box-${boxNum}`);
+                    if (boxElement) {
+                        let textDiv = boxElement.querySelector('.grid-text');
+                        if (hintText && hintText.trim() !== "") {
+                            textDiv.textContent = hintText;
+                            boxElement.classList.remove('empty');
+                            boxElement.classList.add('filled');
+                        } else {
+                            textDiv.textContent = "";
+                            boxElement.classList.remove('filled');
+                            boxElement.classList.add('empty');
+                        }
+                    }
+                });
+            }
+
+            // Update Solved Words list for Guessers on the right sidebar
+            let solvedContainer = document.getElementById('solvedWordsContainer');
+            if (solvedContainer && data.solved_words) {
+                solvedContainer.innerHTML = data.solved_words.map((word, idx) => `
+                    <div style="background: #2a2a2a; padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; color: #28a745; font-weight: bold;">
+                        ${idx + 1}. ${word}
+                    </div>
+                `).join('');
             }
 
             // Dynamically update the player bar container as people play/score
