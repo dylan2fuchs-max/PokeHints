@@ -172,7 +172,7 @@
             position: relative;
             background: #ffffff;
             color: #000;
-            width: 110px;
+            width: 85px;
             height: 35px;
             margin-right: 10px;
             border-radius: 6px;
@@ -286,6 +286,7 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
+            overflow: hidden;
         }
 
         .player-name-display {
@@ -298,10 +299,11 @@
         }
 
         .player-score-display {
-            font-size: 1.2rem;
+            font-size: 0.95rem; /* Scaled down slightly so it fits cleanly */
             font-weight: bold;
             color: #ffcc00;
         }
+
     </style>
 </head>
 <body data-is-hinter="{{ 'true' if is_hinter else 'false' }}">
