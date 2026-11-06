@@ -36,10 +36,11 @@ def generate_lobby_code():
   return "".join(random.choices(characters, k=7))
 
 
-def start_game_session(room):
-    """Initializes the game when full: picks a random hinter and 10 target words."""
+def start_game_session(room, room_code):
+    """Initializes the game when full: picks a random hinter and 10 target words with terminal logs."""
     players = room["players"]
     if not players:
+        print(f"[GAME ERROR] Room {room_code} tried to start, but player list is empty!")
         return
 
     # Reset tracking flags for all players
@@ -47,10 +48,11 @@ def start_game_session(room):
         p["has_been_hinter"] = False
         p["is_hinter"] = False
 
-    # Randomly pick exactly ONE hinter index to start
+    ## Randomly pick exactly ONE hinter index
     hinter_idx = random.randint(0, len(players) - 1)
     players[hinter_idx]["is_hinter"] = True
     players[hinter_idx]["has_been_hinter"] = True
+    hinter_name = players[hinter_idx]["name"]
 
     room["target_words"] = random.sample(
         MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE))
@@ -58,6 +60,13 @@ def start_game_session(room):
     room["current_word_index"] = 0
     room["current_round"] = 1
     room["status"] = "in_game"
+
+    print(f"\n========================================")
+    print(f"🎮 GAME STARTED FOR ROOM: {room_code}")
+    print(f"👑 Assigned Hinter: {hinter_name}")
+    print(f"🕵️‍♂️ Guessers: {[p['name'] for p in players if not p['is_hinter']]}")
+    print(f"🎯 Target Words Loaded: {len(room['target_words'])} words")
+    print(f"========================================\n")
 
 def rotate_hinter_or_advance_round(room):
     """Rotates to the next hinter who hasn't been one yet in this round cycle.
@@ -131,7 +140,9 @@ def join_public_lobby():
         }
 
     room = LOBBIES[public_room_id]
-    if len(room["players"]) < room["max_players"]:
+    print(f"\n[PUBLIC LOBBY] Player '{player_name}' attempting to join. Current count: {len(room['players'])}/{room['max_players']}")
+
+    if len(room["players"]) < room["max_players"] and room["status"] == "waiting":
         player_data = {
             "id": player_id,
             "name": player_name,
@@ -145,8 +156,11 @@ def join_public_lobby():
         session["player_name"] = player_name
         session["player_id"] = player_id
 
+        print(f"[PUBLIC LOBBY] Successfully added '{player_name}' (ID: {player_id[:8]}...). Total players: {len(room['players'])}")
+
         if len(room["players"]) == room["max_players"]:
-            start_game_session(room)
+            print(f"[PUBLIC LOBBY] Room {public_room_id} is full ({room['max_players']}/{room['max_players']}). Starting session...")
+            start_game_session(room, public_room_id)
 
     return redirect(url_for("game_room", room_code=public_room_id))
 
@@ -193,25 +207,27 @@ def host_private_lobby():
 
 @app.route("/lobby/join", methods=["POST"])
 def join_private_lobby():
-    """Allows a user to join an existing private lobby using a code."""
+    """Allows a user to join an existing private lobby with detailed terminal logs."""
     room_code = request.form.get("room_code", "").strip().upper()
     player_name = request.form.get("player_name", "").strip() or "Trainer"
     player_icon = request.form.get("player_icon", "default")
     player_id = str(uuid.uuid4())
 
+    print(f"\n[PRIVATE JOIN] Player '{player_name}' trying to join room '{room_code}'")
+
     if room_code not in LOBBIES:
+        print(f"[PRIVATE JOIN ERROR] Room '{room_code}' not found!")
         return "Lobby not found! Please check the code and try again.", 404
 
     room = LOBBIES[room_code]
-    
-    # DEBUG: Print join status
-    print(f"--- PLAYER JOINING ({room_code}) ---")
-    print(f"Current Players: {len(room['players'])} / Max Players: {room['max_players']}")
+    print(f"[PRIVATE JOIN] Room found. Status: {room['status']} | Players: {len(room['players'])}/{room['max_players']}")
 
     if len(room["players"]) >= room["max_players"]:
+        print(f"[PRIVATE JOIN ERROR] Room '{room_code}' is full!")
         return "Lobby is full!", 400
 
     if room["status"] != "waiting":
+        print(f"[PRIVATE JOIN ERROR] Game in room '{room_code}' has already started!")
         return "Game has already started!", 400
 
     room["players"].append({
@@ -227,11 +243,11 @@ def join_private_lobby():
     session["player_name"] = player_name
     session["player_id"] = player_id
 
-    print(f"After append -> Total Players: {len(room['players'])} | Target Max: {room['max_players']}")
+    print(f"[PRIVATE JOIN] Successfully added '{player_name}' to '{room_code}'. Total players now: {len(room['players'])}/{room['max_players']}")
 
     if len(room["players"]) == room["max_players"]:
-        print(">>> ROOM IS FULL! Starting game session...")
-        start_game_session(room)
+        print(f"[PRIVATE JOIN] Room '{room_code}' has reached max capacity! Triggering game start...")
+        start_game_session(room, room_code)
 
     return redirect(url_for("game_room", room_code=room_code))
 
