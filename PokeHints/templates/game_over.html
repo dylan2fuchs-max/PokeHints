@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokeHints - Victory Podium</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body {
+            background-color: #121212;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background-image: radial-gradient(#2a2a2a 1.5px, transparent 1.5px);
+            background-size: 25px 25px;
+        }
+
+        .modal-card {
+            background: linear-gradient(135deg, #1a1a1a, #262626);
+            border: 3px solid #ffcc00;
+            border-radius: 16px;
+            padding: 30px 40px;
+            width: 100%;
+            max-width: 650px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.8), 0 0 20px rgba(255, 204, 0, 0.2);
+            animation: popIn 0.5s ease-out;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        h1 {
+            color: #ffcc00;
+            font-size: 2.2rem;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .subtitle {
+            color: #aaa;
+            margin-bottom: 25px;
+            font-size: 0.95rem;
+        }
+
+        /* Podium Arena Grid Layout */
+        .podium-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            align-items: end;
+            margin-bottom: 30px;
+            min-height: 220px;
+            padding: 0 10px;
+        }
+
+        .podium-spot {
+            background: #2a2a2a;
+            border: 2px solid #444;
+            border-radius: 10px;
+            padding: 15px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+            transition: transform 0.3s;
+        }
+
+        /* 1st Place (Center Top) */
+        .spot-1 {
+            grid-column: 2;
+            grid-row: 1;
+            background: linear-gradient(to bottom, #332b00, #222);
+            border-color: #ffcc00;
+            transform: translateY(-15px);
+            box-shadow: 0 8px 25px rgba(255, 204, 0, 0.3);
+        }
+
+        /* 2nd Place (Left) */
+        .spot-2 {
+            grid-column: 1;
+            grid-row: 1;
+            border-color: #c0c0c0;
+        }
+
+        /* 3rd Place (Right) */
+        .spot-3 {
+            grid-column: 3;
+            grid-row: 1;
+            border-color: #cd7f32;
+        }
+
+        /* 4th Place (Bottom Middle) */
+        .spot-4 {
+            grid-column: 2;
+            grid-row: 2;
+            border-color: #555;
+            background: #1e1e1e;
+            margin-top: -10px;
+        }
+
+        .rank-badge {
+            position: absolute;
+            top: -12px;
+            background: #ffcc00;
+            color: #000;
+            font-weight: bold;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            text-transform: uppercase;
+        }
+        .spot-1 .rank-badge { background: #ffcc00; }
+        .spot-2 .rank-badge { background: #c0c0c0; }
+        .spot-3 .rank-badge { background: #cd7f32; color: #fff; }
+        .spot-4 .rank-badge { background: #666; color: #fff; }
+
+        .avatar-circle {
+            width: 50px;
+            height: 50px;
+            background: #333;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+            border: 2px solid #555;
+        }
+
+        .player-name {
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+        }
+
+        .player-score {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #28a745;
+        }
+
+        /* Action Buttons */
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: #ffcc00;
+            color: #000;
+        }
+        .btn-primary:hover { background-color: #e6b800; transform: translateY(-2px); }
+
+        .btn-secondary {
+            background-color: #333;
+            color: #fff;
+            border: 2px solid #444;
+        }
+        .btn-secondary:hover { background-color: #444; border-color: #555; transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+    <div class="modal-card">
+        <h1>🏆 Victory Podium</h1>
+        <div class="subtitle">Room Code: <b>{{ room_code }}</b> &bull; Rounds Played: <b>{{ room.rounds }}</b></div>
+        
+        <div class="podium-container">
+            {% for player in players %}
+                {% set rank = loop.index %}
+                <div class="podium-spot spot-{{ rank }}">
+                    <div class="rank-badge">
+                        {% if rank == 1 %}1st Place{% elif rank == 2 %}2nd Place{% elif rank == 3 %}3rd Place{% else %}4th Place{% endif %}
+                    </div>
+                    <div class="avatar-circle">
+                        {% if player.icon == 'pikachu' %}⚡{% elif player.icon == 'charizard' %}🔥{% elif player.icon == 'mewtwo' %}🔮{% else %}👤{% endif %}
+                    </div>
+                    <div class="player-name">{{ player.name }}</div>
+                    <div class="player-score">{{ player.score }} pts</div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="button-group">
+            <a href="/room/{{ room_code }}/play-again" class="btn btn-primary">Play Again</a>
+            <a href="/" class="btn btn-secondary">Main Menu</a>
+        </div>
+    </div>
+</body>
+</html>

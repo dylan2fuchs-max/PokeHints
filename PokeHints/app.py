@@ -76,20 +76,7 @@ def init_game_grid(room):
     room["current_word_index"] = 0                # Index of the active target word (0 to 9)
 
 def calculate_hinter_score(boxes_used):
-    """
-    Calculates hinter points based on box efficiency out of 25 baseline:
-    - <= 5 boxes: +20 pts
-    - 6 to 24 boxes: Scaled or tiered (e.g. 15 boxes = +10 pts)
-    - 25 boxes: 0 pts
-    - > 25 boxes: -1 pt for every box over 25 (max -15 pts at 40 boxes)
-    """
-    if boxes_used <= 5:
-        return 20
-    elif boxes_used == 25:
-        return 0
-    elif boxes_used < 25:
-        # Linear scale between 5 boxes (+20) and 25 boxes (0)
-        # 20 points spread across 20 boxes = 1 point per box saved under 25
+    if boxes_used < 25:
         return 25 - boxes_used
     else:
         # Over 25 boxes: lose 1 point per box over 25
@@ -115,53 +102,51 @@ def finalize_hinter_turn(room, hinter_player):
     
     return earned_points
 
-def rotate_hinter_or_advance_round(room):
-    """Rotates to the next hinter who hasn't been one yet in this round cycle.
-       If all players have been hinter, starts a new round or ends the game.
-    """
+def rotate_hinter_or_advance_round(room, room_code):
+    """Rotates the hinter, handles round progression, or triggers game over."""
     players = room["players"]
     
-    # Reset current hinter flags
+    # 1. Finalize current hinter's box efficiency score
+    current_hinter = next((p for p in players if p.get("is_hinter")), None)
+    if current_hinter:
+        finalize_hinter_turn(room, current_hinter)
+
+    # 2. Clear current hinter flags
     for p in players:
         p["is_hinter"] = False
 
-    # Find players who haven't been a hinter yet in this cycle
+    # 3. Find eligible players who haven't been hinter yet this cycle
     eligible_players = [p for p in players if not p.get("has_been_hinter", False)]
 
     if eligible_players:
-        # Pick the next hinter from eligible players
+        # Pick next hinter
         next_hinter = random.choice(eligible_players)
         next_hinter["is_hinter"] = True
         next_hinter["has_been_hinter"] = True
-        
-        # Load new target words for the next hinter's turn
-        room["target_words"] = random.sample(
-            MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE))
-        )
-        room["current_word_index"] = 0
+
+        init_game_grid(room)
+        room["target_words"] = random.sample(MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE)))
+        print(f"\n[ROTATION] New Hinter assigned: {next_hinter['name']}\n")
     else:
-        # Everyone has been a hinter once this round! Check round limits.
+        # Cycle complete. Check rounds.
         current_round = room.get("current_round", 1)
         max_rounds = room.get("rounds", 1)
 
         if current_round < max_rounds:
-            # Advance to next round, reset hinter tracking for everyone, keep scores intact!
             room["current_round"] = current_round + 1
             for p in players:
                 p["has_been_hinter"] = False
             
-            # Pick the first new hinter for the new round
             first_hinter = random.choice(players)
             first_hinter["is_hinter"] = True
             first_hinter["has_been_hinter"] = True
 
-            room["target_words"] = random.sample(
-                MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE))
-            )
-            room["current_word_index"] = 0
+            init_game_grid(room)
+            room["target_words"] = random.sample(MASTER_POKEMON_DATABASE, min(10, len(MASTER_POKEMON_DATABASE)))
+            print(f"\n[ROUND ADVANCE] Starting Round {room['current_round']}! New Hinter: {first_hinter['name']}\n")
         else:
-            # Game Over - All rounds completed
             room["status"] = "game_over"
+            print(f"\n[GAME OVER] All rounds completed for room '{room_code}'!\n")
 
 @app.route("/")
 def index():
@@ -324,17 +309,25 @@ def room_status(room_code):
 
 @app.route("/room/<room_code>/guess", methods=["POST"])
 def submit_guess(room_code):
-    """Receives a player's guess, validates it against the active target word."""
+    """Receives a player's guess, validates it against the active target word, and awards points/popups."""
     if room_code not in LOBBIES:
         return jsonify({"success": False, "error": "Room not found"}), 404
 
     room = LOBBIES[room_code]
     current_player_id = session.get("player_id")
 
-    # Prevent the active Hinter from submitting guesses
+    current_player = None
     for player in room["players"]:
-        if player.get("id") == current_player_id and player.get("is_hinter", False):
-            return jsonify({"success": False, "error": "Hinters cannot submit guesses!"}), 400
+        if player.get("id") == current_player_id:
+            current_player = player
+            break
+
+    if not current_player:
+        return jsonify({"success": False, "error": "Player not found"}), 400
+
+    # Prevent the active Hinter from submitting guesses
+    if current_player.get("is_hinter", False):
+        return jsonify({"success": False, "error": "Hinters cannot submit guesses!"}), 400
 
     data = request.get_json() or {}
     guessed_word = data.get("guess", "").strip()
@@ -342,19 +335,20 @@ def submit_guess(room_code):
     if not guessed_word:
         return jsonify({"success": False, "error": "Empty guess"})
 
+    # Store latest guess for live pop-up display on player card
+    current_player["last_guess"] = guessed_word
+
     # Find current target word
     target_words = room.get("target_words", [])
     current_idx = room.get("current_word_index", 0)
 
     if current_idx >= len(target_words):
-        return jsonify(
-            {"success": False, "error": "All words have been guessed!"}
-        )
+        return jsonify({"success": False, "error": "All words have been guessed!"})
 
     active_target = target_words[current_idx]
 
     # Check if guess matches the active target word (case-insensitive)
-    is_correct = guessed_word.lower() == active_target.lower()
+    is_correct = guessed_word.lower() == active_target.strip().lower()
 
     response_data = {
         "success": True,
@@ -363,6 +357,9 @@ def submit_guess(room_code):
     }
 
     if is_correct:
+        # Award points to the correct guesser
+        current_player["score"] += 1
+
         # Append to solved words list for sidebar display
         if active_target not in room.get("solved_words", []):
             room.setdefault("solved_words", []).append(active_target)
@@ -370,11 +367,23 @@ def submit_guess(room_code):
         # Increment to the next target word
         room["current_word_index"] += 1
         response_data["next_word_index"] = room["current_word_index"]
-            # Automatically rotate to the next hinter or advance round/end game
+
+        # Check if all 10 words are completed
+        if room["current_word_index"] >= len(target_words):
+            response_data["round_complete"] = True
+            # Finalize hinter score based on boxes used before rotating
+            finalize_hinter_turn(room, current_hinter_lookup(room))
             rotate_hinter_or_advance_round(room)
             response_data["game_status"] = room["status"]
 
     return jsonify(response_data)
+
+def current_hinter_lookup(room):
+    """Helper to find the active hinter in the room."""
+    for p in room["players"]:
+        if p.get("is_hinter"):
+            return p
+    return room["players"][0]
 
 @app.route("/room/<room_code>/hint", methods=["POST"])
 def submit_hint(room_code):
@@ -422,7 +431,35 @@ def submit_hint(room_code):
     if not added:
         return jsonify({"success": False, "message": "All 40 hint boxes are full!"})
 
-    return jsonify({"success": True})
+    print(f"[HINT ACCEPTED] Room {room_code} | Box #{room['current_box_index']}: '{hint_phrase}'")
+    return jsonify({"success": True, "hint_boxes": room["hint_boxes"]})
+
+@app.route("/room/<room_code>/play-again")
+def play_again(room_code):
+    """Resets the room for a fresh game loop with the same players and code."""
+    if room_code not in LOBBIES:
+        return redirect(url_for("index"))
+
+    room = LOBBIES[room_code]
+    
+    # Reset scores and status for a brand new match
+    room["status"] = "waiting"
+    room["current_round"] = 1
+    room["current_word_index"] = 0
+    room["hint_boxes"] = ["" for _ in range(40)]
+    room["solved_words"] = []
+
+    for player in room["players"]:
+        player["score"] = 0
+        player["is_hinter"] = False
+        player["has_been_hinter"] = False
+        player.pop("last_guess", None)
+
+    # If public lobby, redirect to public join handler; if private, redirect back to room
+    if room_code == "PUBLIC_MAIN":
+        return redirect(url_for("index"))
+    
+    return redirect(url_for("game_room", room_code=room_code))
 
 
 @app.route("/room/<room_code>")

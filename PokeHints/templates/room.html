@@ -49,13 +49,16 @@
             overflow-y: auto;
         }
 
-        /* Center Grid for Hint Logs / Words (1-40 Columns) */
+        /* Center Grid for Hint Logs / Words */
         .word-grid-section {
             flex: 1;
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, minmax(140px, 1fr)); /* Clean 5-column layout */
             gap: 10px;
             align-content: start;
+            max-height: calc(100vh - 180px);
+            overflow-y: auto;
+            padding-right: 5px;
         }
 
         .grid-item {
@@ -335,6 +338,35 @@
             </script>
         </div>
 
+        <!-- Right Sidebar: Target Words for Hinter / Solved Words for Guesser -->
+        <div class="right-sidebar">
+            {% if is_hinter %}
+                <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleTargetList()">
+                    <div class="sidebar-title" style="margin-bottom: 0;">Target Words (Secret)</div>
+                    <button id="toggleBtn" style="background: none; border: none; color: #ffcc00; font-size: 1rem; cursor: pointer;">▲</button>
+                </div>
+                <div id="targetListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+                    {% for target in target_words %}
+                    <div class="target-item" style="display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">{{ loop.index }}</span>
+                            <span class="target-text" style="color: #fff; font-weight: 500;">{{ target }}</span>
+                        </div>
+                        <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: #333; color: #aaa;">Unsolved</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="sidebar-title">Solved Words</div>
+                <div id="solvedWordsContainer" style="margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 250px; overflow-y: auto;">
+                    <!-- Solved words populate here dynamically -->
+                </div>
+                <div style="color: #888; font-size: 0.85rem; text-align: center; margin-top: 15px; line-height: 1.3;">
+                    🤫 You are a <b>Guesser</b>.<br>Listen to clues and type your guesses below!
+                </div>
+            {% endif %}
+        </div>
+
             <script>
                 function submitAction(event) {
                     event.preventDefault();
@@ -396,36 +428,6 @@
             .catch(error => console.error('Error:', error));
         }
         </script>
-
-        <!-- Right Sidebar: Target Words (Visible ONLY to the Hinter) -->
-        <div class="right-sidebar">
-            {% if is_hinter %}
-                <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleTargetList()">
-                    <div class="sidebar-title" style="margin-bottom: 0;">Target Words (Secret)</div>
-                    <button id="toggleBtn" style="background: none; border: none; color: #ffcc00; font-size: 1rem; cursor: pointer;">▲</button>
-                </div>
-                <div id="targetListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
-                    {% for target in target_words %}
-                    <div class="target-item" style="display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">{{ loop.index }}</span>
-                            <span class="target-text" style="color: #fff; font-weight: 500;">{{ target }}</span>
-                        </div>
-                        <!-- Status indicator for solved/unsolved -->
-                        <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: #333; color: #aaa;">Unsolved</span>
-                    </div>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <div class="sidebar-title">Solved Words</div>
-                <div id="solvedWordsContainer" style="margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 250px; overflow-y: auto;">
-                    <!-- Solved words populate here dynamically -->
-                </div>
-                <div style="color: #888; font-size: 0.85rem; text-align: center; margin-top: 15px; line-height: 1.3;">
-                    🤫 You are a <b>Guesser</b>.<br>Listen to clues and type your guesses below!
-                </div>
-            {% endif %}
-        </div>
 
         <script>
             // Toggle function to fold up or expand the target list for the hinter
@@ -513,10 +515,9 @@
             let response = await fetch(endpoint, {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Type": isHinter ? "application/x-www-form-urlencoded" : "application/json",
                 },
-                // Send JSON or form data based on what the endpoint expects
-                body: isHinter ? `hint=${encodeURIComponent(value)}` : `guess=${encodeURIComponent(value)}`
+                body: isHinter ? `hint=${encodeURIComponent(value)}` : JSON.stringify({ guess: value })
             });
 
             let result = await response.json();
@@ -527,8 +528,10 @@
                         alert(result.message || "Invalid hint! Please choose another word.");
                     }
                 } else {
-                    if (result.penalty) {
-                        alert("Penalty! -1 point for guessing out of turn or double guessing.");
+                    if (!result.success) {
+                        alert(result.error || "Guess failed.");
+                    } else if (result.correct) {
+                        console.log("Correct guess registered!");
                     }
                 }
             } else {
@@ -613,7 +616,7 @@
                 `).join('');
             }
 
-            // Dynamically update the player bar container as people play/score
+            // Dynamically update the player bar container including live guess pop-ups
             let playerContainer = document.querySelector(".player-bar-container");
             if (playerContainer && data.players) {
                 playerContainer.innerHTML = data.players.map((p, idx) => `
@@ -626,7 +629,7 @@
                         </div>
                         ${!p.is_hinter ? `
                         <div class="player-guess-box" id="guess-box-${idx + 1}">
-                            <span class="guess-text">Waiting...</span>
+                            <span class="guess-text">${p.last_guess || 'Waiting...'}</span>
                         </div>` : ''}
                     </div>
                 `).join('');
