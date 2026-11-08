@@ -60,6 +60,9 @@ def start_game_session(room, room_code):
     room["current_word_index"] = 0
     room["current_round"] = 1
     room["status"] = "in_game"
+    
+    # Initialize the 40-box grid and tracking variables safely
+    init_game_grid(room)
 
     print(f"\n========================================")
     print(f"🎮 GAME STARTED FOR ROOM: {room_code}")
@@ -84,7 +87,13 @@ def calculate_hinter_score(boxes_used):
         return -overage
 
 def add_hint_to_grid(room, hint_phrase):
-    """Adds a hint phrase into the sequential 40-box grid if space permits."""
+    """Adds a hint phrase into the sequential 40-box grid safely if space permits."""
+    # Safety check: ensure hint grid keys exist on the room dictionary
+    if "hint_boxes" not in room:
+        room["hint_boxes"] = ["" for _ in range(40)]
+    if "current_box_index" not in room:
+        room["current_box_index"] = 0
+
     box_idx = room.get("current_box_index", 0)
     if box_idx < 40:
         room["hint_boxes"][box_idx] = hint_phrase
@@ -309,7 +318,7 @@ def room_status(room_code):
 
 @app.route("/room/<room_code>/guess", methods=["POST"])
 def submit_guess(room_code):
-    """Receives a player's guess, validates it against the active target word, and awards points/popups."""
+    """Receives a player's guess, validates it against the active target word, and handles penalties/popups."""
     if room_code not in LOBBIES:
         return jsonify({"success": False, "error": "Room not found"}), 404
 
@@ -338,6 +347,24 @@ def submit_guess(room_code):
     # Store latest guess for live pop-up display on player card
     current_player["last_guess"] = guessed_word
 
+    # Track current box index for double-guess / out-of-turn penalty checks
+    current_box = room.get("current_box_index", 0)
+    penalty_applied = False
+
+    if current_box == 0:
+        # Penalty: Guessing before any hint has been given
+        current_player["score"] -= 1
+        penalty_applied = True
+        print(f"[PENALTY] Room {room_code}: {current_player['name']} guessed before any hint was given (-1 pt)")
+    elif current_player.get("last_guessed_box") == current_box:
+        # Penalty: Double-guessing on the exact same hint box turn
+        current_player["score"] -= 1
+        penalty_applied = True
+        print(f"[PENALTY] Room {room_code}: {current_player['name']} double-guessed on box {current_box} (-1 pt)")
+    else:
+        # Valid new guess turn; lock this player to this box until a new hint is given
+        current_player["last_guessed_box"] = current_box
+
     # Find current target word
     target_words = room.get("target_words", [])
     current_idx = room.get("current_word_index", 0)
@@ -354,6 +381,7 @@ def submit_guess(room_code):
         "success": True,
         "correct": is_correct,
         "guess": guessed_word,
+        "penalty": penalty_applied,
     }
 
     if is_correct:
@@ -364,6 +392,10 @@ def submit_guess(room_code):
         if active_target not in room.get("solved_words", []):
             room.setdefault("solved_words", []).append(active_target)
 
+        # Reset box guess tracking so a new word/box resets double-guess protection
+        for p in room["players"]:
+            p.pop("last_guessed_box", None)
+
         # Increment to the next target word
         room["current_word_index"] += 1
         response_data["next_word_index"] = room["current_word_index"]
@@ -373,7 +405,7 @@ def submit_guess(room_code):
             response_data["round_complete"] = True
             # Finalize hinter score based on boxes used before rotating
             finalize_hinter_turn(room, current_hinter_lookup(room))
-            rotate_hinter_or_advance_round(room)
+            rotate_hinter_or_advance_round(room, room_code)
             response_data["game_status"] = room["status"]
 
     return jsonify(response_data)
