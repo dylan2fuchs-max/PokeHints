@@ -101,25 +101,32 @@
         .grid-item.solved .grid-text { background-color: #d4edda; color: #155724; }
         .grid-item.active .grid-text { background-color: #fff3cd; color: #856404; }
 
-        /* Default & Grouped Grey Background Colors (1-15, 16-25, 26-40) */
-        .grid-item.empty:nth-child(-n+15) .grid-text {
-            background-color: #6c757d; /* Color for 1-15 */
+        /* Universal fallback background for any grid text to prevent white flashes */
+        .grid-text {
+            background-color: #262b30;
             color: #ccc;
         }
 
-        .grid-item.empty:nth-child(n+16):nth-child(-n+25) .grid-text {
-            background-color: #5a6268; /* Color for 16-25 (change hex to your preference) */
-            color: #ccc;
+        /* Grouped Background Colors (1-15, 16-25, 26-40) */
+        .grid-item:nth-child(-n+15) .grid-text {
+            background-color: #a9afb4; /* Color for 1-15 */
+            color: #222;
         }
 
-        .grid-item.empty:nth-child(n+26):nth-child(-n+40) .grid-text {
-            background-color: #495057; /* Color for 26-40 (change hex to your preference) */
+        .grid-item:nth-child(n+16):nth-child(-n+25) .grid-text {
+            background-color: #5f6a72; /* Color for 16-25 */
+            color: #fff;
+        }
+
+        .grid-item:nth-child(n+26):nth-child(-n+40) .grid-text {
+            background-color: #262b30; /* Color for 26-40 (ensures box 40 and beyond are covered) */
             color: #ccc;
         }
 
         /* Right Sidebar (Target Words 1-10) */
         .right-sidebar {
-            width: 280px;
+            width: 300px;
+            min-width: 300px;
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -127,6 +134,8 @@
             padding: 15px;
             border-radius: 8px;
             border: 2px solid #333;
+            overflow-y: auto;
+            max-height: calc(100vh - 180px);
         }
 
         .sidebar-title {
@@ -140,8 +149,13 @@
 
         .target-item {
             display: flex;
-            height: 40px;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 42px;
             border-radius: 6px;
+            padding: 6px 10px;
+            background: #1a1a1a;
+            border: 1px solid #333;
             overflow: hidden;
         }
 
@@ -370,7 +384,6 @@
                     <div class="target-item" style="display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">{{ loop.index }}</span>
-                            <span class="target-text" style="color: #fff; font-weight: 500;">{{ target }}</span>
                         </div>
                         <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: #333; color: #aaa;">Unsolved</span>
                     </div>
@@ -614,6 +627,7 @@
 
             // Update the 40-box hint grid dynamically
             if (data.hint_boxes) {
+                const isHinter = document.body.dataset.isHinter === 'true';
                 data.hint_boxes.forEach((hintText, index) => {
                     let boxNum = index + 1;
                     let boxElement = document.getElementById(`grid-box-${boxNum}`);
@@ -623,13 +637,67 @@
                             textDiv.textContent = hintText;
                             boxElement.classList.remove('empty');
                             boxElement.classList.add('filled');
+                            
+                            // Make filled boxes clickable for the hinter to copy words into their input bar for complex hints
+                            if (isHinter) {
+                                boxElement.style.cursor = 'pointer';
+                                boxElement.onclick = () => {
+                                    const inputField = document.getElementById('wordInput');
+                                    if (inputField) {
+                                        // Append or set the hint text safely
+                                        inputField.value = inputField.value ? inputField.value + " " + hintText : hintText;
+                                        inputField.focus();
+                                    }
+                                };
+                            }
                         } else {
                             textDiv.textContent = "";
                             boxElement.classList.remove('filled');
                             boxElement.classList.add('empty');
+                            boxElement.style.cursor = 'default';
+                            boxElement.onclick = null;
                         }
                     }
                 });
+            }
+
+            // Dynamically update the Hinter's Target Words sidebar list with correct `${target}` text and clean containment
+            let targetListContainer = document.getElementById('targetListContainer');
+            if (targetListContainer && data.target_words) {
+                const currentIdx = data.current_word_index;
+                const solvedWords = data.solved_words || [];
+
+                targetListContainer.innerHTML = data.target_words.map((target, idx) => {
+                    const isSolved = solvedWords.includes(target);
+                    const isActive = (idx === currentIdx && !isSolved);
+
+                    let statusBg = "#333";
+                    let statusColor = "#aaa";
+                    let statusText = "Unsolved";
+                    let itemBorder = "1px solid #333";
+
+                    if (isSolved) {
+                        statusBg = "rgba(40, 167, 69, 0.2)";
+                        statusColor = "#28a745";
+                        statusText = "Solved ✓";
+                        itemBorder = "1px solid #28a745";
+                    } else if (isActive) {
+                        statusBg = "rgba(255, 204, 0, 0.1)";
+                        statusColor = "#ffcc00";
+                        statusText = "Active ➔";
+                        itemBorder = "2px solid #ffcc00";
+                    }
+
+                    return `
+                        <div class="target-item" style="border: ${itemBorder}; background-color: ${statusBg};">
+                            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
+                                <span class="target-number">${idx + 1}</span>
+                                <span class="target-text">${target}</span>
+                            </div>
+                            <span class="target-status" style="background: ${statusBg}; color: ${statusColor};">${statusText}</span>
+                        </div>
+                    `;
+                }).join('');
             }
 
             // Update Solved Words list for Guessers on the right sidebar

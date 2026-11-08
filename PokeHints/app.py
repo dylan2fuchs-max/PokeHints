@@ -294,7 +294,7 @@ def join_private_lobby():
 
 @app.route("/room/<room_code>/api/status")
 def room_status(room_code):
-    """API endpoint for client polling to sync player joins and game status."""
+    """API endpoint for client polling to sync player joins, target words, and game status."""
     if room_code not in LOBBIES:
         return jsonify({"error": "Room not found"}), 404
 
@@ -311,9 +311,11 @@ def room_status(room_code):
         "max_players": room["max_players"],
         "host": room.get("host"),
         "current_round": room.get("current_round", 1),
+        "rounds": room.get("rounds", 1),
         "current_word_index": room.get("current_word_index", 0),
-        "hint_boxes": room.get("hint_boxes", [""] * 40),
-        "solved_words": room.get("solved_words", [])
+        "target_words": room.get("target_words", []),
+        "solved_words": room.get("solved_words", []),
+        "hint_boxes": room.get("hint_boxes", [""] * 40)
     })
 
 @app.route("/room/<room_code>/guess", methods=["POST"])
@@ -419,14 +421,13 @@ def current_hinter_lookup(room):
 
 @app.route("/room/<room_code>/hint", methods=["POST"])
 def submit_hint(room_code):
-    """Receives a hinter's hint phrase, validates whole-word constraints, and adds to grid."""
+    """Receives a hinter's hint phrase, validates whole-word constraints, and handles new or reused hints."""
     if room_code not in LOBBIES:
         return jsonify({"success": False, "error": "Room not found"}), 404
 
     room = LOBBIES[room_code]
     current_player_id = session.get("player_id")
 
-    # Verify current player is the hinter
     current_hinter = None
     for player in room["players"]:
         if player.get("id") == current_player_id and player.get("is_hinter", True):
@@ -440,31 +441,42 @@ def submit_hint(room_code):
     if not hint_phrase:
         return jsonify({"success": False, "message": "Hint cannot be empty."})
 
-    # Whole-word constraint check against the active target word
+    # Whole-word constraint check against active target word
     target_words = room.get("target_words", [])
     current_idx = room.get("current_word_index", 0)
 
     if current_idx < len(target_words):
         active_target = target_words[current_idx].lower()
-        # Split hint and target into words to enforce whole-word check (not partial letters)
         hint_words = set(hint_phrase.lower().split())
         target_words_list = set(active_target.split())
 
-        # Check if any whole word from the hint matches any whole word in the target
         intersection = hint_words.intersection(target_words_list)
         if intersection:
+            print(f"[HINT REJECTED] Room {room_code}: '{hint_phrase}' contains target word part '{list(intersection)[0]}'")
             return jsonify({
                 "success": False, 
                 "message": f"Invalid hint! '{list(intersection)[0]}' is part of the active target word."
             })
 
-    # Add hint into the 40-box grid sequentially
+    # Check if this hint has already been added to the board (Hint Reuse check)
+    existing_hints_lower = [h.lower() for h in room.get("hint_boxes", []) if h]
+    
+    if hint_phrase.lower() in existing_hints_lower:
+        print(f"[HINT REUSED] Room {room_code} | Hinter reused existing word: '{hint_phrase}'")
+        return jsonify({
+            "success": True, 
+            "reused": True,
+            "hint_boxes": room["hint_boxes"],
+            "message": f"Reused existing hint '{hint_phrase}'."
+        })
+
+    # Otherwise, add new hint into the 40-box grid sequentially
     added = add_hint_to_grid(room, hint_phrase)
     if not added:
         return jsonify({"success": False, "message": "All 40 hint boxes are full!"})
 
     print(f"[HINT ACCEPTED] Room {room_code} | Box #{room['current_box_index']}: '{hint_phrase}'")
-    return jsonify({"success": True, "hint_boxes": room["hint_boxes"]})
+    return jsonify({"success": True, "reused": False, "hint_boxes": room["hint_boxes"]})
 
 @app.route("/room/<room_code>/play-again")
 def play_again(room_code):
