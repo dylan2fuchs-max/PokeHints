@@ -480,17 +480,23 @@
 
     </div>
 
+    <div style="background: #111; padding: 10px; text-align: center; border-top: 2px solid #333; color: #ffcc00; font-weight: bold; font-size: 1.05rem;">
+        Active Hint: <span id="latestHintDisplay" style="color: #fff; font-weight: normal;">Waiting for hinter's clue...</span>
+    </div>
+
     <!-- Input Action Bar for Hinter / Guessers -->
-    <div class="action-bar">
-        <form id="guessForm" onsubmit="submitAction(event)">
+    <div class="action-bar" style="flex-direction: column; gap: 8px;">
+        <!-- Container for active reused word badges -->
+        <div id="reusedTagsContainer" style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 600px; width: 100%;"></div>
+
+        <form id="guessForm" onsubmit="submitAction(event)" style="display: flex; gap: 10px; width: 100%; max-width: 600px;">
             <input 
                 type="text" 
                 id="wordInput" 
                 name="guess" 
-                placeholder="{% if is_hinter %}Type your hint word...{% else %}Guess the Pokémon, character, or item...{% endif %}" 
+                placeholder="{% if is_hinter %}Type new word...{% else %}Guess the Pokémon, character, or item...{% endif %}" 
                 list="pokeList" 
                 autocomplete="off"
-                required
             >
             <datalist id="pokeList">
                 {% for word in valid_words %}
@@ -534,37 +540,107 @@
         window.lastRound = 1;
     }
 
+    let selectedReusedWords = [];
+
+    // Modify the grid click handler (inside your periodic poll grid loop)
+    // When the hinter clicks a grid box, add it as a reused tag instead of jamming it into the input
+    if (isHinter) {
+        boxElement.style.cursor = 'pointer';
+        boxElement.onclick = () => {
+            if (hintText && !selectedReusedWords.includes(hintText)) {
+                selectedReusedWords.push(hintText);
+                renderReusedTags();
+            }
+        };
+    }
+
+    function renderReusedTags() {
+        const container = document.getElementById('reusedTagsContainer');
+        if (!container) return;
+        
+        container.innerHTML = selectedReusedWords.map((word, index) => `
+            <div style="background: #ffcc00; color: #000; padding: 4px 10px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; display: flex; align-items: center; gap: 6px;">
+                <span>+ ${word}</span>
+                <button type="button" onclick="removeReusedWord(${index})" style="background: none; border: none; color: #000; cursor: pointer; font-weight: bold;">×</button>
+            </div>
+        `).join('');
+    }
+
+    function removeReusedWord(index) {
+        selectedReusedWords.splice(index, 1);
+        renderReusedTags();
+    }
+
     async function submitAction(event) {
         event.preventDefault();
         const inputField = document.getElementById('wordInput');
-        const value = inputField.value.trim();
-        if (!value) return;
+        const newWord = inputField.value.trim();
 
         // Read the hinter flag safely from the body's dataset attribute
         const isHinter = document.body.dataset.isHinter === 'true';
-        const endpoint = isHinter ? `/room/${roomCode}/hint` : `/room/${roomCode}/guess`;
 
-        try {
-            let response = await fetch(endpoint, {
-                method: "POST",
-                headers: {
-                    "Content-Type": isHinter ? "application/x-www-form-urlencoded" : "application/json",
-                },
-                body: isHinter ? `hint=${encodeURIComponent(value)}` : JSON.stringify({ guess: value })
-            });
+        if (isHinter) {
+            // Hinter action: ensure we have either a reused badge, a typed word, or both
+            if (selectedReusedWords.length === 0 && !newWord) return;
+            
+            let combinedHint = [...selectedReusedWords, newWord].filter(Boolean).join(" ");
+            const endpoint = `/room/${roomCode}/hint`;
 
-            let result = await response.json();
-            if (response.ok) {
-                inputField.value = ''; // Clear input on success
-                if (isHinter) {
+            try {
+                let response = await fetch(endpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: `hint=${encodeURIComponent(combinedHint)}`
+                });
+
+                let result = await response.json();
+                if (response.ok) {
+                    inputField.value = ''; // Clear input on success
+                    selectedReusedWords = []; // Clear badge tray on success
+                    renderReusedTags();
+
                     if (!result.success) {
                         alert(result.message || "Invalid hint! Please choose another word.");
+                    } else if (result.hint_boxes) {
+                        // Instant update on grid
+                        result.hint_boxes.forEach((hintText, index) => {
+                            let boxNum = index + 1;
+                            let boxElement = document.getElementById(`grid-box-${boxNum}`);
+                            if (boxElement) {
+                                let textDiv = boxElement.querySelector('.grid-text');
+                                if (hintText && hintText.trim() !== "") {
+                                    textDiv.textContent = hintText;
+                                    boxElement.classList.remove('empty');
+                                    boxElement.classList.add('filled');
+                                }
+                            }
+                        });
                     }
                 } else {
+                    alert(result.error || "Action failed.");
+                }
+            } catch (err) {
+                console.error("Error submitting hint:", err);
+            }
+
+        } else {
+            // Guesser action
+            if (!newWord) return;
+            const endpoint = `/room/${roomCode}/guess`;
+
+            try {
+                let response = await fetch(endpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ guess: newWord })
+                });
+
+                let result = await response.json();
+                if (response.ok) {
+                    inputField.value = '';
                     if (!result.success) {
                         alert(result.error || "Guess failed.");
                     } else {
-                        // Check if a penalty was incurred from double-guessing or guessing out of turn
                         if (result.penalty) {
                             alert("Penalty! -1 point for guessing out of turn or double guessing.");
                         }
@@ -572,12 +648,12 @@
                             console.log("Correct guess registered!");
                         }
                     }
+                } else {
+                    alert(result.error || "Action failed.");
                 }
-            } else {
-                alert(result.error || "Action failed.");
+            } catch (err) {
+                console.error("Error submitting guess:", err);
             }
-        } catch (err) {
-            console.error("Error submitting action:", err);
         }
     }
 
@@ -659,6 +735,17 @@
                         }
                     }
                 });
+            }
+
+            // Update Latest Hint Display for Guessers and Hinter
+            let latestHintDisplay = document.getElementById('latestHintDisplay');
+            if (latestHintDisplay && data.hint_boxes) {
+                const validHints = data.hint_boxes.filter(h => h && h.trim() !== "");
+                if (validHints.length > 0) {
+                    latestHintDisplay.textContent = validHints[validHints.length - 1];
+                } else {
+                    latestHintDisplay.textContent = "Waiting for hinter's clue...";
+                }
             }
 
             // Dynamically update the Hinter's Target Words sidebar list with correct `${target}` text and clean containment
