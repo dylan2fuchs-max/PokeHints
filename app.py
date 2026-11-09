@@ -3,6 +3,7 @@ import os
 import random
 import string
 import uuid
+import re
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 app = Flask(__name__)
@@ -72,19 +73,24 @@ def start_game_session(room, room_code):
     print(f"========================================\n")
 
 def init_game_grid(room):
-    """Initializes the 40-box grid and target tracking for a new hinter turn."""
+    """Initializes the 40-box grid, target tracking, and resets the hinter's unlocked word bank for a new turn."""
     room["hint_boxes"] = ["" for _ in range(40)]  # 40 sequential hint boxes
-    room["current_box_index"] = 0                 # Tracks next available box (0 to 39)
-    room["solved_words"] = []                     # Stores successfully solved words in numeric order
-    room["current_word_index"] = 0                # Index of the active target word (0 to 9)
+    room["current_box_index"] = 0                # Tracks next available box (0 to 39)
+    room["solved_words"] = []                    # Stores successfully solved words in numeric order
+    room["current_word_index"] = 0               # Index of the active target word (0 to 9)
+    room["hinter_words"] = set()                 # FRESH hinter vocabulary bank for this new turn/hinter!
 
 def calculate_hinter_score(boxes_used):
-    if boxes_used < 25:
+    """
+    Calculates the hinter's score based on grid boxes used:
+    - 25 or fewer boxes: Earns points equal to the difference (25 - boxes_used).
+    - Over 25 boxes: Loses 1 point per box over 25, capped at a maximum loss of -15.
+    """
+    if boxes_used <= 25:
         return 25 - boxes_used
     else:
-        # Over 25 boxes: lose 1 point per box over 25
         overage = boxes_used - 25
-        return -overage
+        return max(-15, -overage)
 
 def add_hint_to_grid(room, hint_phrase):
     """Adds a hint phrase into the sequential 40-box grid safely if space permits."""
@@ -103,7 +109,7 @@ def add_hint_to_grid(room, hint_phrase):
 
 def finalize_hinter_turn(room, hinter_player):
     """Calculates efficiency score at the end of 10 words and awards it to the hinter."""
-    boxes_used = room.get("current_box_index", 40)
+    boxes_used = room.get("current_box_index", 25)
     earned_points = calculate_hinter_score(boxes_used)
     
     hinter_player["score"] += earned_points
@@ -167,8 +173,11 @@ def index():
 def join_public_lobby():
     """Handles matching players into public lobbies (4 players max per room)."""
     player_name = request.form.get("player_name", "Trainer")
-    player_icon = request.form.get("player_icon", "default")
-    player_id = str(uuid.uuid4())
+    player_icon = request.form.get("player_icon", url_for('static', filename='Default 1.png'))
+    if player_icon == "custom":
+        custom_url = request.form.get("custom_icon_url", "").strip()
+        if custom_url:
+            player_icon = custom_url
 
     public_room_id = "PUBLIC_MAIN"
     if public_room_id not in LOBBIES:
@@ -183,7 +192,16 @@ def join_public_lobby():
     room = LOBBIES[public_room_id]
     print(f"\n[PUBLIC LOBBY] Player '{player_name}' attempting to join. Current count: {len(room['players'])}/{room['max_players']}")
 
-    if len(room["players"]) < room["max_players"] and room["status"] == "waiting":
+    # Check if player already exists in the room
+    existing_player = next((p for p in room["players"] if p["name"] == player_name), None)
+
+    if existing_player:
+        # Update existing player's icon/session details without duplicating
+        existing_player["icon"] = player_icon
+        player_id = existing_player["id"]
+        print(f"[PUBLIC LOBBY] Existing player '{player_name}' re-synced.")
+    elif len(room["players"]) < room["max_players"] and room["status"] == "waiting":
+        player_id = str(uuid.uuid4())
         player_data = {
             "id": player_id,
             "name": player_name,
@@ -193,18 +211,20 @@ def join_public_lobby():
             "has_been_hinter": False,
         }
         room["players"].append(player_data)
-        session["room_code"] = public_room_id
-        session["player_name"] = player_name
-        session["player_id"] = player_id
-
         print(f"[PUBLIC LOBBY] Successfully added '{player_name}' (ID: {player_id[:8]}...). Total players: {len(room['players'])}")
+    else:
+        print(f"[PUBLIC LOBBY ERROR] Room full or game started.")
+        return "Lobby is full or game has already started!", 400
 
-        if len(room["players"]) == room["max_players"]:
-            print(f"[PUBLIC LOBBY] Room {public_room_id} is full ({room['max_players']}/{room['max_players']}). Starting session...")
-            start_game_session(room, public_room_id)
+    session["room_code"] = public_room_id
+    session["player_name"] = player_name
+    session["player_id"] = player_id
+
+    if len(room["players"]) == room["max_players"] and room["status"] == "waiting":
+        print(f"[PUBLIC LOBBY] Room {public_room_id} is full ({room['max_players']}/{room['max_players']}). Starting session...")
+        start_game_session(room, public_room_id)
 
     return redirect(url_for("game_room", room_code=public_room_id))
-
 
 @app.route("/lobby/host", methods=["GET", "POST"])
 def host_private_lobby():
@@ -216,12 +236,12 @@ def host_private_lobby():
         max_players = int(request.form.get("max_players", 4))
         rounds = int(request.form.get("rounds", 1))
         host_name = request.form.get("player_name", "HostTrainer")
-        player_icon = request.form.get("player_icon", "default")
+        player_icon = request.form.get("player_icon", url_for('static', filename='Default 1.png'))
+        if player_icon == "custom":
+            custom_url = request.form.get("custom_icon_url", "").strip()
+            if custom_url:
+                player_icon = custom_url
         player_id = str(uuid.uuid4())
-
-        # DEBUG: Print host setup parameters
-        print(f"--- HOSTING PRIVATE LOBBY ({room_code}) ---")
-        print(f"Max Players Set: {max_players} | Rounds: {rounds}")
 
         LOBBIES[room_code] = {
             "host": host_name,
@@ -233,7 +253,6 @@ def host_private_lobby():
                 "is_hinter": False,
                 "has_been_hinter": False,
             }],
-
             "rounds": rounds,
             "max_players": max_players,
             "status": "waiting",
@@ -246,13 +265,17 @@ def host_private_lobby():
 
     return render_template("host_lobby.html")
 
+
 @app.route("/lobby/join", methods=["POST"])
 def join_private_lobby():
     """Allows a user to join an existing private lobby with detailed terminal logs."""
     room_code = request.form.get("room_code", "").strip().upper()
     player_name = request.form.get("player_name", "").strip() or "Trainer"
-    player_icon = request.form.get("player_icon", "default")
-    player_id = str(uuid.uuid4())
+    player_icon = request.form.get("player_icon", url_for('static', filename='Default 1.png'))
+    if player_icon == "custom":
+        custom_url = request.form.get("custom_icon_url", "").strip()
+        if custom_url:
+            player_icon = custom_url
 
     print(f"\n[PRIVATE JOIN] Player '{player_name}' trying to join room '{room_code}'")
 
@@ -263,30 +286,37 @@ def join_private_lobby():
     room = LOBBIES[room_code]
     print(f"[PRIVATE JOIN] Room found. Status: {room['status']} | Players: {len(room['players'])}/{room['max_players']}")
 
-    if len(room["players"]) >= room["max_players"]:
+    # Check if player already exists in the private room
+    existing_player = next((p for p in room["players"] if p["name"] == player_name), None)
+
+    if existing_player:
+        # Update existing player's icon/session details without duplicating
+        existing_player["icon"] = player_icon
+        player_id = existing_player["id"]
+        print(f"[PRIVATE JOIN] Existing player '{player_name}' re-synced in private room.")
+    elif len(room["players"]) >= room["max_players"]:
         print(f"[PRIVATE JOIN ERROR] Room '{room_code}' is full!")
         return "Lobby is full!", 400
-
-    if room["status"] != "waiting":
+    elif room["status"] != "waiting":
         print(f"[PRIVATE JOIN ERROR] Game in room '{room_code}' has already started!")
         return "Game has already started!", 400
-
-    room["players"].append({
-        "id": player_id,
-        "name": player_name,
-        "icon": player_icon,
-        "score": 0,
-        "is_hinter": False,
-        "has_been_hinter": False,
-    })
+    else:
+        player_id = str(uuid.uuid4())
+        room["players"].append({
+            "id": player_id,
+            "name": player_name,
+            "icon": player_icon,
+            "score": 0,
+            "is_hinter": False,
+            "has_been_hinter": False,
+        })
+        print(f"[PRIVATE JOIN] Successfully added '{player_name}' to '{room_code}'. Total players now: {len(room['players'])}/{room['max_players']}")
 
     session["room_code"] = room_code
     session["player_name"] = player_name
     session["player_id"] = player_id
 
-    print(f"[PRIVATE JOIN] Successfully added '{player_name}' to '{room_code}'. Total players now: {len(room['players'])}/{room['max_players']}")
-
-    if len(room["players"]) == room["max_players"]:
+    if len(room["players"]) == room["max_players"] and room["status"] == "waiting":
         print(f"[PRIVATE JOIN] Room '{room_code}' has reached max capacity! Triggering game start...")
         start_game_session(room, room_code)
 
@@ -315,7 +345,8 @@ def room_status(room_code):
         "current_word_index": room.get("current_word_index", 0),
         "target_words": room.get("target_words", []),
         "solved_words": room.get("solved_words", []),
-        "hint_boxes": room.get("hint_boxes", [""] * 40)
+        "hint_boxes": room.get("hint_boxes", [""] * 40),
+        "latest_hint": room.get("latest_hint", "")
     })
 
 @app.route("/room/<room_code>/guess", methods=["POST"])
@@ -412,6 +443,26 @@ def submit_guess(room_code):
 
     return jsonify(response_data)
 
+def add_new_words_to_grid(room, new_words):
+    """Adds only the newly unlocked words into the sequential 40-box grid safely if space permits."""
+    if "hint_boxes" not in room:
+        room["hint_boxes"] = ["" for _ in range(40)]
+    if "current_box_index" not in room:
+        room["current_box_index"] = 0
+
+    box_idx = room.get("current_box_index", 0)
+    
+    # Check if we have enough room in the 40-box limit for these new words
+    if box_idx + len(new_words) > 40:
+        return False
+
+    for word in new_words:
+        room["hint_boxes"][box_idx] = word
+        box_idx += 1
+        room["current_box_index"] = box_idx
+
+    return True
+
 def current_hinter_lookup(room):
     """Helper to find the active hinter in the room."""
     for p in room["players"]:
@@ -419,9 +470,11 @@ def current_hinter_lookup(room):
             return p
     return room["players"][0]
 
+CURSE_WORDS = {"damn", "hell", "shit", "fuck", "bitch", "ass", "crap", "bastard", "abortion", "racism", "asexual", "bisexual", "gay", "stupid", "lgbtq", "lesbian", "dump", "jerk", "opioids", "rape", "cum", "orgasm"}
+
 @app.route("/room/<room_code>/hint", methods=["POST"])
 def submit_hint(room_code):
-    """Receives a hinter's hint phrase, validates whole-word constraints, and handles new or reused hints."""
+    """Receives a hinter's hint, allows full message reuse for players, but tracks only new words on the 40-box grid."""
     if room_code not in LOBBIES:
         return jsonify({"success": False, "error": "Room not found"}), 404
 
@@ -441,42 +494,116 @@ def submit_hint(room_code):
     if not hint_phrase:
         return jsonify({"success": False, "message": "Hint cannot be empty."})
 
+    # SAFETY CHECK 1: Symbols and punctuation
+    if re.search(r'[^a-zA-Z0-9\s]', hint_phrase):
+        return jsonify({"success": False, "message": "Symbols and punctuation are not allowed!"})
+
+    hint_words = [w.lower() for w in hint_phrase.split()]
+
+    # SAFETY CHECK 2: Curse words
+    for w in hint_words:
+        if w in CURSE_WORDS:
+            return jsonify({"success": False, "message": "Keep it clean! That word is not allowed."})
+
+    # Ensure hinter word bank exists
+    if "hinter_words" not in room:
+        room["hinter_words"] = set()
+
+    unlocked_words = room["hinter_words"]
+
+    # Identify unique new words in this specific hint
+    unique_new_words = set(w for w in hint_words if w not in unlocked_words)
+
+    # Enforce the 1-new-word rule per hint submission
+    if len(unique_new_words) > 1:
+        return jsonify({
+            "success": False, 
+            "message": f"You can only introduce ONE new word at a time! (New words found: {', '.join(unique_new_words)})"
+        })
+
     # Whole-word constraint check against active target word
     target_words = room.get("target_words", [])
     current_idx = room.get("current_word_index", 0)
 
     if current_idx < len(target_words):
         active_target = target_words[current_idx].lower()
-        hint_words = set(hint_phrase.lower().split())
         target_words_list = set(active_target.split())
+        hint_words_set = set(hint_words)
 
-        intersection = hint_words.intersection(target_words_list)
+        intersection = hint_words_set.intersection(target_words_list)
         if intersection:
-            print(f"[HINT REJECTED] Room {room_code}: '{hint_phrase}' contains target word part '{list(intersection)[0]}'")
+            matched_word = list(intersection)[0]
             return jsonify({
                 "success": False, 
-                "message": f"Invalid hint! '{list(intersection)[0]}' is part of the active target word."
+                "message": f"Invalid hint! '{matched_word}' is part of the active target word."
             })
 
-    # Check if this hint has already been added to the board (Hint Reuse check)
-    existing_hints_lower = [h.lower() for h in room.get("hint_boxes", []) if h]
-    
-    if hint_phrase.lower() in existing_hints_lower:
-        print(f"[HINT REUSED] Room {room_code} | Hinter reused existing word: '{hint_phrase}'")
-        return jsonify({
-            "success": True, 
-            "reused": True,
-            "hint_boxes": room["hint_boxes"],
-            "message": f"Reused existing hint '{hint_phrase}'."
-        })
-
-    # Otherwise, add new hint into the 40-box grid sequentially
-    added = add_hint_to_grid(room, hint_phrase)
+    added = add_new_words_to_grid(room, list(unique_new_words))
     if not added:
-        return jsonify({"success": False, "message": "All 40 hint boxes are full!"})
+        return jsonify({"success": False, "message": "All 40 grid boxes for new words are full!"})
 
-    print(f"[HINT ACCEPTED] Room {room_code} | Box #{room['current_box_index']}: '{hint_phrase}'")
-    return jsonify({"success": True, "reused": False, "hint_boxes": room["hint_boxes"]})
+    # Permanently unlock the word into the hinter's word list
+    for w in unique_new_words:
+        room["hinter_words"].add(w)
+
+    # SAVE THE FULL PHRASE SO THE POLL DOESN'T OVERWRITE IT
+    room["latest_hint"] = hint_phrase
+
+    print(f"[HINT ACCEPTED] Room {room_code} | Message Shared: '{hint_phrase}' | New Word Added to Grid: {list(unique_new_words)}")
+    
+    return jsonify({
+        "success": True, 
+        "hint": hint_phrase, 
+        "new_words": list(unique_new_words),
+        "hint_boxes": room["hint_boxes"]
+    })
+
+@app.route("/room/<room_code>/skip", methods=["POST"])
+def skip_target_word(room_code):
+    """Allows the active Hinter to skip the current target word with a -2 points penalty."""
+    if room_code not in LOBBIES:
+        return jsonify({"success": False, "error": "Room not found"}), 404
+
+    room = LOBBIES[room_code]
+    current_player_id = session.get("player_id")
+
+    current_hinter = None
+    for player in room["players"]:
+        if player.get("id") == current_player_id and player.get("is_hinter", True):
+            current_hinter = player
+            break
+
+    if not current_hinter:
+        return jsonify({"success": False, "error": "Only the active Hinter can skip words!"}), 403
+
+    target_words = room.get("target_words", [])
+    current_idx = room.get("current_word_index", 0)
+
+    if current_idx >= len(target_words):
+        return jsonify({"success": False, "message": "No active word to skip!"})
+
+    skipped_word = target_words[current_idx]
+
+    # Apply -2 point penalty for skipping
+    current_hinter["score"] -= 2
+
+    # Advance to the next target word
+    room["current_word_index"] += 1
+    
+    round_complete = False
+    if room["current_word_index"] >= len(target_words):
+        round_complete = True
+        finalize_hinter_turn(room, current_hinter)
+        rotate_hinter_or_advance_round(room, room_code)
+
+    print(f"[SKIP] Hinter '{current_hinter['name']}' skipped '{skipped_word}' (-2 pts penalty).")
+
+    return jsonify({
+        "success": True,
+        "skipped_word": skipped_word,
+        "round_complete": round_complete,
+        "current_word_index": room["current_word_index"]
+    })
 
 @app.route("/room/<room_code>/play-again")
 def play_again(room_code):
@@ -504,6 +631,24 @@ def play_again(room_code):
         return redirect(url_for("index"))
     
     return redirect(url_for("game_room", room_code=room_code))
+
+@app.route("/room/<room_code>/victory")
+def victory_screen(room_code):
+    """Renders the final victory podium screen when a game session ends."""
+    if room_code not in LOBBIES:
+        return redirect(url_for("index"))
+
+    room = LOBBIES[room_code]
+    
+    # Sort players by score in descending order for the podium placement
+    sorted_players = sorted(room["players"], key=lambda p: p["score"], reverse=True)
+
+    return render_template(
+        "victory.html",  # Make sure this matches your victory HTML filename!
+        room=room,
+        room_code=room_code,
+        players=sorted_players
+    )
 
 
 @app.route("/room/<room_code>")

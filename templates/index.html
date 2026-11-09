@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokeHints - Home</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-image: radial-gradient(#2a2a2a 1px, transparent 1px);
+            background-size: 20px 20px;
+            padding: 10px;
+        }
+
+        .main-container {
+            background: #111;
+            padding: 25px 30px;
+            border-radius: 12px;
+            border: 2px solid #333;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            text-align: center;
+        }
+
+        h1 {
+            color: #ffcc00;
+            font-size: 2.2rem;
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: bold;
+            color: #ccc;
+            font-size: 0.85rem;
+        }
+
+        input[type="text"], input[type="url"] {
+            width: 100%;
+            background: #222;
+            border: 2px solid #444;
+            border-radius: 6px;
+            padding: 10px;
+            color: #fff;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus, input[type="url"]:focus {
+            border-color: #ffcc00;
+        }
+
+        /* Visual Icon Selector Grid */
+        .icon-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .icon-option {
+            background: #1a1a1a;
+            border: 2px solid #444;
+            border-radius: 8px;
+            padding: 6px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .icon-option img {
+            width: 34px;
+            height: 34px;
+            object-fit: cover;
+            border-radius: 50%;
+            background: #222;
+        }
+
+        .icon-option span {
+            font-size: 0.7rem;
+            color: #aaa;
+            font-weight: bold;
+        }
+
+        .icon-option:hover {
+            border-color: #777;
+            background: #222;
+        }
+
+        .icon-option.selected {
+            border-color: #ffcc00;
+            background: rgba(255, 204, 0, 0.1);
+        }
+
+        .icon-option.selected span {
+            color: #ffcc00;
+        }
+
+        .custom-icon-container {
+            margin-top: 8px;
+            display: none;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.95rem;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s, transform 0.1s;
+            width: 100%;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .btn-public {
+            background-color: #28a745;
+            color: #fff;
+        }
+        .btn-public:hover { background-color: #218838; }
+
+        .btn-host {
+            background-color: #ffcc00;
+            color: #000;
+        }
+        .btn-host:hover { background-color: #e6b800; }
+
+        .btn-join {
+            background-color: #17a2b8;
+            color: #fff;
+        }
+        .btn-join:hover { background-color: #138496; }
+
+        .divider {
+            margin: 14px 0;
+            border-bottom: 1px solid #333;
+            position: relative;
+        }
+        .divider span {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #111;
+            padding: 0 10px;
+            color: #666;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <h1>PokeHints</h1>
+
+        <!-- Global Trainer Name Input -->
+        <div class="form-group">
+            <label for="playerName">Trainer Name</label>
+            <input type="text" id="playerName" name="player_name" placeholder="Enter your trainer name..." required>
+        </div>
+
+        <div class="action-buttons">
+            <!-- 1. Join Public Lobby -->
+            <form action="{{ url_for('join_public_lobby') }}" method="POST" id="publicForm" onsubmit="return validatePublicSubmit(event)">
+                <input type="hidden" name="player_name" id="hiddenPublicName">
+                <input type="hidden" name="player_icon" id="hiddenPublicIcon" value="{{ url_for('static', filename='Default 1.png') }}">
+                <input type="hidden" name="custom_icon_url" id="hiddenPublicCustomUrl">
+                
+                <div class="form-group">
+                    <label>Choose Avatar Icon</label>
+                    <div class="icon-grid" id="avatarGrid">
+                        <div class="icon-option selected" data-value="{{ url_for('static', filename='Default 1.png') }}" onclick="selectIcon(this, false)">
+                            <img src="{{ url_for('static', filename='Default 1.png') }}" alt="Default 1" onerror="this.replaceWith('👤')">
+                            <span>Default 1</span>
+                        </div>
+                        <div class="icon-option" data-value="{{ url_for('static', filename='Default 2.png') }}" onclick="selectIcon(this, false)">
+                            <img src="{{ url_for('static', filename='Default 2.png') }}" alt="Default 2" onerror="this.replaceWith('👤')">
+                            <span>Default 2</span>
+                        </div>
+                        <div class="icon-option" data-value="{{ url_for('static', filename='Default 3.png') }}" onclick="selectIcon(this, false)">
+                            <img src="{{ url_for('static', filename='Default 3.png') }}" alt="Default 3" onerror="this.replaceWith('👤')">
+                            <span>Default 3</span>
+                        </div>
+                        <div class="icon-option" data-value="{{ url_for('static', filename='Default 4.png') }}" onclick="selectIcon(this, false)">
+                            <img src="{{ url_for('static', filename='Default 4.png') }}" alt="Default 4" onerror="this.replaceWith('👤')">
+                            <span>Default 4</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Custom Option Card (Usable in private lobbies, blocked in public) -->
+                    <div class="icon-option" data-value="custom" onclick="selectIcon(this, true)" style="margin-top: 8px; flex-direction: row; justify-content: center; gap: 10px; padding: 10px;">
+                        <span style="font-size: 1.1rem;">🌐</span>
+                        <span style="font-weight: bold; color: #fff;">Custom Image URL (Private Matches Only)</span>
+                    </div>
+
+                    <div class="custom-icon-container" id="customIconBox">
+                        <input type="url" id="customIconUrlInput" placeholder="https://example.com/avatar.png">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-public">Join Public Lobby</button>
+            </form>
+
+            <!-- 2. Host Private Lobby Page -->
+            <form action="{{ url_for('host_private_lobby') }}" method="GET" id="hostForm">
+                <button type="submit" class="btn-host">Host Private Lobby</button>
+            </form>
+
+            <div class="divider"><span>OR JOIN PRIVATE</span></div>
+
+            <!-- 3. Join Private Lobby with Code -->
+            <form action="{{ url_for('join_private_lobby') }}" method="POST" id="joinForm" style="display: flex; flex-direction: column; gap: 8px;" onsubmit="prepareJoinSubmit()">
+                <input type="hidden" name="player_name" id="hiddenJoinName">
+                <input type="hidden" name="player_icon" id="hiddenJoinIcon">
+                <input type="hidden" name="custom_icon_url" id="hiddenJoinCustomUrl">
+                <input type="text" name="room_code" placeholder="Enter 7-Digit Code..." style="text-transform: uppercase;" required>
+                <button type="submit" class="btn-join">Join Private Lobby</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let selectedIconValue = "{{ url_for('static', filename='Default 1.png') }}";
+        let isCustomSelected = false;
+
+        function selectIcon(element, isCustom) {
+            document.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('selected'));
+            element.classList.add('selected');
+
+            isCustomSelected = isCustom;
+            const customBox = document.getElementById('customIconBox');
+
+            if (isCustom) {
+                customBox.style.display = 'block';
+                selectedIconValue = 'custom';
+            } else {
+                customBox.style.display = 'none';
+                selectedIconValue = element.getAttribute('data-value');
+            }
+        }
+
+        // Helper to pass name and icon data into private join form
+        function prepareJoinSubmit() {
+            const nameValue = document.getElementById('playerName').value.trim();
+            if (nameValue) {
+                document.getElementById('hiddenJoinName').value = nameValue;
+            }
+
+            let finalIcon = selectedIconValue;
+            if (isCustomSelected) {
+                finalIcon = 'custom';
+                document.getElementById('hiddenJoinCustomUrl').value = document.getElementById('customIconUrlInput').value.trim();
+            }
+            document.getElementById('hiddenJoinIcon').value = finalIcon;
+        }
+
+        function validatePublicSubmit(event) {
+            const nameValue = document.getElementById('playerName').value.trim();
+            if (!nameValue) return false;
+
+            if (isCustomSelected) {
+                alert("Custom icons are not allowed in public matches! Please select one of the Default icons (1-4) to join a public lobby.");
+                event.preventDefault();
+                return false;
+            }
+
+            // Populate hidden inputs
+            document.getElementById('hiddenPublicName').value = nameValue;
+            document.getElementById('hiddenPublicIcon').value = selectedIconValue;
+            document.getElementById('hiddenPublicCustomUrl').value = document.getElementById('customIconUrlInput').value.trim();
+            return true;
+        }
+    </script>
+</body>
+</html>

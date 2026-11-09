@@ -198,10 +198,11 @@
             border-radius: 10px;
             display: flex;
             align-items: center;
-            width: 220px;
+            width: 260px; /* Increased from 220px to give names room */
             height: 60px;
             border: 2px solid #444;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            padding-right: 5px;
         }
 
         /* Guesser Live Answer Box styling */
@@ -306,15 +307,23 @@
         }
 
         .player-avatar-box {
-            width: 60px;
-            height: 100%;
-            background: #333;
-            border-top-left-radius: 8px;
-            border-bottom-left-radius: 8px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #222;
+            overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
+            margin-left: 8px;
+            border: 2px solid #555;
+            flex-shrink: 0;
+        }
+
+        .player-avatar-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .player-info {
@@ -327,12 +336,12 @@
         }
 
         .player-name-display {
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             font-weight: bold;
             color: #fff;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            overflow: visible; /* Prevents harsh clipping if slightly long */
+            text-overflow: clip;
         }
 
         .player-score-display {
@@ -363,7 +372,7 @@
                 // Render 40 boxes initially (will be updated dynamically via polling)
                 for (let i = 1; i <= 40; i++) {
                     document.write(`
-                        <div class="grid-item empty" id="grid-box-${i}">
+                        <div class="grid-item grid-box empty" id="grid-box-${i}">
                             <div class="grid-number">${i}</div>
                             <div class="grid-text"></div>
                         </div>
@@ -382,8 +391,15 @@
                 <div id="targetListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
                     {% for target in target_words %}
                     <div class="target-item" style="display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; flex: 1;">
                             <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">{{ loop.index }}</span>
+                            
+                            <!-- Visual Sprite Helper Icon Added Here -->
+                            <img src="https://play.pokemonshowdown.com/sprites/dex/{{ target | lower | replace(' ', '') }}.png" 
+                                 style="width: 24px; height: 24px; object-fit: contain;" 
+                                 onerror="this.style.display='none'" title="Visual Hint Helper" />
+
+                            <span class="target-text" style="background: transparent !important; color: #fff !important; font-size: 0.9rem; font-weight: bold;">{{ target }}</span>
                         </div>
                         <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: #333; color: #aaa;">Unsolved</span>
                     </div>
@@ -485,11 +501,12 @@
     </div>
 
     <!-- Input Action Bar for Hinter / Guessers -->
-    <div class="action-bar" style="flex-direction: column; gap: 8px;">
+    <div class="action-bar" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; margin: 0 auto;">
+        
         <!-- Container for active reused word badges -->
-        <div id="reusedTagsContainer" style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 600px; width: 100%;"></div>
+        <div id="reusedTagsContainer" style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 600px; width: 100%; margin-bottom: 8px;"></div>
 
-        <form id="guessForm" onsubmit="submitAction(event)" style="display: flex; gap: 10px; width: 100%; max-width: 600px;">
+        <form id="guessForm" onsubmit="submitAction(event)" style="display: flex; gap: 10px; width: 100%; max-width: 600px; justify-content: center;">
             <input 
                 type="text" 
                 id="wordInput" 
@@ -497,6 +514,7 @@
                 placeholder="{% if is_hinter %}Type new word...{% else %}Guess the Pokémon, character, or item...{% endif %}" 
                 list="pokeList" 
                 autocomplete="off"
+                style="flex: 1;"
             >
             <datalist id="pokeList">
                 {% for word in valid_words %}
@@ -512,17 +530,15 @@
     <div class="player-card {% if player.is_hinter %}hinter{% endif %}" id="player-card-{{ loop.index }}">
         <div class="crown-icon">👑</div>
         <div class="player-avatar-box">
-            👤
+            <img src="{{ player.icon }}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.replaceWith('👤')" />
         </div>
         <div class="player-info">
             <span class="player-name-display">{{ player.name }}</span>
-            <span class="player-score-display">{{ player.score }}</span>
+            <span class="player-score-display">{{ player.score }} pts</span>
         </div>
-        <!-- Guesser Live Answer Badge/Box -->
         {% if not player.is_hinter %}
-        <div class="player-guess-box" id="guess-box-{{ loop.index }}">
-            <span class="guess-text">Waiting...</span>
-            <span class="guess-status-tag" style="display: none;">close</span>
+        <div class="player-guess-box" id="guess-box-{{ loop.index }}" style="font-size: 0.85rem; color: #aaa;">
+            <span class="guess-text">{{ player.last_guess or 'Waiting...' }}</span>
         </div>
         {% endif %}
     </div>
@@ -532,7 +548,7 @@
 <script>
     const roomCode = "{{ room_code }}";
     let initialStatus = "{{ room.status }}";
-    
+
     if (typeof window.lastWordIndex === 'undefined') {
         window.lastWordIndex = 0;
     }
@@ -542,16 +558,8 @@
 
     let selectedReusedWords = [];
 
-    // Modify the grid click handler (inside your periodic poll grid loop)
-    // When the hinter clicks a grid box, add it as a reused tag instead of jamming it into the input
-    if (isHinter) {
-        boxElement.style.cursor = 'pointer';
-        boxElement.onclick = () => {
-            if (hintText && !selectedReusedWords.includes(hintText)) {
-                selectedReusedWords.push(hintText);
-                renderReusedTags();
-            }
-        };
+    function checkIsHinter() {
+        return document.body.dataset.isHinter === 'true';
     }
 
     function renderReusedTags() {
@@ -574,13 +582,10 @@
     async function submitAction(event) {
         event.preventDefault();
         const inputField = document.getElementById('wordInput');
-        const newWord = inputField.value.trim();
-
-        // Read the hinter flag safely from the body's dataset attribute
+        const newWord = inputField ? inputField.value.trim() : '';
         const isHinter = document.body.dataset.isHinter === 'true';
 
         if (isHinter) {
-            // Hinter action: ensure we have either a reused badge, a typed word, or both
             if (selectedReusedWords.length === 0 && !newWord) return;
             
             let combinedHint = [...selectedReusedWords, newWord].filter(Boolean).join(" ");
@@ -595,26 +600,34 @@
 
                 let result = await response.json();
                 if (response.ok) {
-                    inputField.value = ''; // Clear input on success
-                    selectedReusedWords = []; // Clear badge tray on success
-                    renderReusedTags();
-
                     if (!result.success) {
                         alert(result.message || "Invalid hint! Please choose another word.");
-                    } else if (result.hint_boxes) {
-                        // Instant update on grid
-                        result.hint_boxes.forEach((hintText, index) => {
-                            let boxNum = index + 1;
-                            let boxElement = document.getElementById(`grid-box-${boxNum}`);
-                            if (boxElement) {
-                                let textDiv = boxElement.querySelector('.grid-text');
-                                if (hintText && hintText.trim() !== "") {
-                                    textDiv.textContent = hintText;
-                                    boxElement.classList.remove('empty');
-                                    boxElement.classList.add('filled');
-                                }
+                    } else {
+                        if (inputField) inputField.value = '';
+                        selectedReusedWords = []; 
+                        renderReusedTags();
+
+                        if (result.hint) {
+                            let latestHintDisplay = document.getElementById('latestHintDisplay');
+                            if (latestHintDisplay) {
+                                latestHintDisplay.textContent = result.hint;
                             }
-                        });
+                        }
+
+                        if (result.hint_boxes) {
+                            result.hint_boxes.forEach((hintText, index) => {
+                                let boxNum = index + 1;
+                                let boxElement = document.getElementById(`grid-box-${boxNum}`);
+                                if (boxElement) {
+                                    let textDiv = boxElement.querySelector('.grid-text');
+                                    if (textDiv && hintText && hintText.trim() !== "") {
+                                        textDiv.textContent = hintText;
+                                        boxElement.classList.remove('empty');
+                                        boxElement.classList.add('filled');
+                                    }
+                                }
+                            });
+                        }
                     }
                 } else {
                     alert(result.error || "Action failed.");
@@ -624,7 +637,6 @@
             }
 
         } else {
-            // Guesser action
             if (!newWord) return;
             const endpoint = `/room/${roomCode}/guess`;
 
@@ -637,7 +649,7 @@
 
                 let result = await response.json();
                 if (response.ok) {
-                    inputField.value = '';
+                    if (inputField) inputField.value = '';
                     if (!result.success) {
                         alert(result.error || "Guess failed.");
                     } else {
@@ -657,7 +669,7 @@
         }
     }
 
-    // Periodic Polling to sync player list & game state live
+    // Periodic Polling to sync player list, target words, and game state live
     setInterval(async () => {
         try {
             let response = await fetch(`/room/${roomCode}/api/status`);
@@ -665,7 +677,11 @@
             
             let data = await response.json();
 
-            // Set initial baseline on first poll tick
+            if (initialStatus === "waiting" && data.status === "in_game") {
+                window.location.reload();
+                return;
+            }
+
             if (window.lastWordIndex === 0 && data.current_word_index > 0) {
                 window.lastWordIndex = data.current_word_index;
             }
@@ -673,14 +689,11 @@
                 window.lastRound = data.current_round;
             }
 
-            // 1. Handle Game Over state
             if (data.status === "game_over") {
-                alert("Game Over! All rounds are complete. Final scores are locked in!");
-                window.location.href = "/";
+                window.location.href = `/room/${roomCode}/victory`;
                 return;
             }
 
-            // 2. Detect if a Hinter rotation happened (word index reset to 0) or Round advanced
             if (data.status === "in_game") {
                 if (data.current_word_index < window.lastWordIndex || data.current_round > window.lastRound) {
                     window.location.reload();
@@ -688,45 +701,39 @@
                 }
             }
 
-            // Update status text in header dynamically
             let statusDisplay = document.getElementById("roomStatusDisplay");
             if (statusDisplay) {
                 statusDisplay.textContent = data.status.toUpperCase();
-                
-                // CRITICAL FIX: If the page loaded while waiting, but the server is now "in_game", 
-                // force an immediate reload so the server evaluates `is_hinter` and renders the Hinter screen!
-                if (initialStatus === "waiting" && data.status === "in_game") {
-                    window.location.reload();
-                    return;
-                }
             }
 
             // Update the 40-box hint grid dynamically
             if (data.hint_boxes) {
-                const isHinter = document.body.dataset.isHinter === 'true';
+                const isHinter = checkIsHinter();
                 data.hint_boxes.forEach((hintText, index) => {
                     let boxNum = index + 1;
                     let boxElement = document.getElementById(`grid-box-${boxNum}`);
                     if (boxElement) {
                         let textDiv = boxElement.querySelector('.grid-text');
-                        if (hintText && hintText.trim() !== "") {
+                        if (textDiv && hintText && hintText.trim() !== "") {
                             textDiv.textContent = hintText;
                             boxElement.classList.remove('empty');
                             boxElement.classList.add('filled');
                             
-                            // Make filled boxes clickable for the hinter to copy words into their input bar for complex hints
                             if (isHinter) {
                                 boxElement.style.cursor = 'pointer';
                                 boxElement.onclick = () => {
-                                    const inputField = document.getElementById('wordInput');
-                                    if (inputField) {
-                                        // Append or set the hint text safely
-                                        inputField.value = inputField.value ? inputField.value + " " + hintText : hintText;
-                                        inputField.focus();
+                                    if (hintText) {
+                                        let wordsInBox = hintText.split(/\s+/);
+                                        wordsInBox.forEach(word => {
+                                            if (word && !selectedReusedWords.includes(word)) {
+                                                selectedReusedWords.push(word);
+                                            }
+                                        });
+                                        renderReusedTags();
                                     }
                                 };
                             }
-                        } else {
+                        } else if (textDiv) {
                             textDiv.textContent = "";
                             boxElement.classList.remove('filled');
                             boxElement.classList.add('empty');
@@ -737,20 +744,19 @@
                 });
             }
 
-            // Update Latest Hint Display for Guessers and Hinter
+            // Update Latest Hint Display using the stored full hint phrase from the server
             let latestHintDisplay = document.getElementById('latestHintDisplay');
-            if (latestHintDisplay && data.hint_boxes) {
-                const validHints = data.hint_boxes.filter(h => h && h.trim() !== "");
-                if (validHints.length > 0) {
-                    latestHintDisplay.textContent = validHints[validHints.length - 1];
+            if (latestHintDisplay) {
+                if (data.latest_hint && data.latest_hint.trim() !== "") {
+                    latestHintDisplay.textContent = data.latest_hint;
                 } else {
                     latestHintDisplay.textContent = "Waiting for hinter's clue...";
                 }
             }
 
-            // Dynamically update the Hinter's Target Words sidebar list with correct `${target}` text and clean containment
+            // Dynamically update the Hinter's Target Words sidebar list
             let targetListContainer = document.getElementById('targetListContainer');
-            if (targetListContainer && data.target_words) {
+            if (targetListContainer && data.target_words && data.target_words.length > 0) {
                 const currentIdx = data.current_word_index;
                 const solvedWords = data.solved_words || [];
 
@@ -776,12 +782,12 @@
                     }
 
                     return `
-                        <div class="target-item" style="border: ${itemBorder}; background-color: ${statusBg};">
+                        <div class="target-item" style="border: ${itemBorder}; background-color: ${statusBg}; display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px;">
                             <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
-                                <span class="target-number">${idx + 1}</span>
-                                <span class="target-text">${target}</span>
+                                <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">${idx + 1}</span>
+                                <span class="target-text" style="background: transparent !important; color: #fff !important; font-size: 0.9rem; font-weight: bold;">${target}</span>
                             </div>
-                            <span class="target-status" style="background: ${statusBg}; color: ${statusColor};">${statusText}</span>
+                            <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${statusBg}; color: ${statusColor};">${statusText}</span>
                         </div>
                     `;
                 }).join('');
@@ -797,13 +803,15 @@
                 `).join('');
             }
 
-            // Dynamically update the player bar container including live guess pop-ups
+            // Update player bar container including live guess pop-ups
             let playerContainer = document.querySelector(".player-bar-container");
             if (playerContainer && data.players) {
                 playerContainer.innerHTML = data.players.map((p, idx) => `
                     <div class="player-card ${p.is_hinter ? 'hinter' : ''}" id="player-card-${idx + 1}">
                         <div class="crown-icon">👑</div>
-                        <div class="player-avatar-box">👤</div>
+                        <div class="player-avatar-box">
+                            <img src="${p.icon}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.replaceWith('👤')" />
+                        </div>
                         <div class="player-info">
                             <span class="player-name-display">${p.name}</span>
                             <span class="player-score-display">Score: ${p.score}</span>
@@ -819,7 +827,5 @@
         } catch (err) {
             console.error("Error polling room status:", err);
         }
-    }, 2000); // Polls every 2 seconds
+    }, 2000);
 </script>
-</body>
-</html>

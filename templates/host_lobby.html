@@ -27,6 +27,22 @@
                 <label>Trainer Name</label>
                 <input type="text" name="player_name" required placeholder="Your name...">
             </div>
+
+            <div class="form-group">
+                <label>Player Avatar Icon</label>
+                <select name="player_icon" id="iconSelect" onchange="toggleCustomIcon(this)">
+                    <option value="{{ url_for('static', filename='Default 1.png') }}">Default 1</option>
+                    <option value="{{ url_for('static', filename='Default 2.png') }}">Default 2</option>
+                    <option value="{{ url_for('static', filename='Default 3.png') }}">Default 3</option>
+                    <option value="{{ url_for('static', filename='Default 4.png') }}">Default 4</option>
+                    <option value="custom">🌐 Custom Image URL...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <input type="url" name="custom_icon_url" id="customIconInput" placeholder="https://example.com/avatar.png" style="display: none;" />
+            </div>
+
             <div class="form-group">
                 <label>Custom Lobby Code (Leave blank for random 7-digit)</label>
                 <input type="text" name="room_code" placeholder="e.g. MYLOBBY" style="text-transform: uppercase;">
@@ -49,5 +65,19 @@
         </form>
         <a href="{{ url_for('index') }}" class="back-link">← Back to Main Menu</a>
     </div>
+
+    <script>
+    function toggleCustomIcon(select) {
+        let customInput = document.getElementById('customIconInput');
+        if (select.value === 'custom') {
+            customInput.style.display = 'block';
+            customInput.required = true;
+        } else {
+            customInput.style.display = 'none';
+            customInput.required = false;
+            customInput.value = '';
+        }
+    }
+    </script>
 </body>
 </html>
