@@ -350,7 +350,7 @@
             color: #ffcc00;
         }
 
-    </style>
+        </style>
 </head>
 <body data-is-hinter="{{ 'true' if is_hinter else 'false' }}">
 
@@ -361,6 +361,15 @@
             <span style="color: #aaa;">Trainer: <b style="color: #ffcc00;">{{ session.get('player_name', 'Trainer') }}</b></span>
             <div>Status: <span id="roomStatusDisplay" style="color: #28a745; font-weight:bold;">{{ room.status | upper }}</span></div>
         </div>
+    </div>
+
+    <!-- Inside your <div class="room-header"> -->
+    <div style="display: flex; gap: 15px; align-items: center; font-size: 0.9rem;">
+        <button type="button" onclick="toggleMusic()" id="musicToggleBtn" style="background: #222; border: 1px solid #444; color: #ffcc00; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold;">
+            🎵 Music: OFF
+        </button>
+        <span style="color: #aaa;">Trainer: <b style="color: #ffcc00;">{{ session.get('player_name', 'Trainer') }}</b></span>
+        <div>Status: <span id="roomStatusDisplay" style="color: #28a745; font-weight:bold;">{{ room.status | upper }}</span></div>
     </div>
 
     <!-- Main Game Screen Layout -->
@@ -481,6 +490,7 @@
                         box.style.borderColor = '#e6b800';
                         
                         if (data.round_complete) {
+                            playSound('magic'); // ✨ Sparkling magic chime!
                             alert("All 10 words solved! Great job team!");
                         }
                     } else {
@@ -625,6 +635,19 @@
         renderReusedTags();
     }
 
+    function toggleMusic() {
+        const btn = document.getElementById('musicToggleBtn');
+        if (isMusicPlaying) {
+            isMusicPlaying = false;
+            if (bgMusicInterval) clearInterval(bgMusicInterval);
+            if (btn) btn.textContent = "🎵 Music: OFF";
+        } else {
+            isMusicPlaying = true;
+            startBackgroundMusic();
+            if (btn) btn.textContent = "🎵 Music: ON";
+        }
+    }
+
     async function skipTargetWord() {
         const skipBtn = document.getElementById('skipWordBtn');
         if (skipBtn) skipBtn.disabled = true;
@@ -642,6 +665,7 @@
                 } else {
                     console.log(`Hinter skipped word: ${result.skipped_word}`);
                     if (result.round_complete) {
+                        playSound('penalty'); // ⚔️ Penalty sound for skipping (-2 pts)
                         location.reload();
                     }
                 }
@@ -730,9 +754,11 @@
                         alert(result.error || "Guess failed.");
                     } else {
                         if (result.penalty) {
+                            playSound('coin'); // 🪙 Coin jingle!
                             alert("Penalty! -1 point for guessing out of turn or double guessing.");
                         }
                         if (result.correct) {
+                            playSound('penalty'); // ⚔️ Penalty thud!
                             console.log("Correct guess registered!");
                         }
                     }
@@ -905,6 +931,139 @@
         if (skipBtn) {
             skipBtn.style.display = isHinterNow ? 'block' : 'none';
         }
+
+        // --- Fantasy Sound Effect Engine ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'magic') {
+                // ✨ Magical Chime / Hint Accepted (Sparkling ascending arpeggio)
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                    let osc = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.06);
+                    gain.gain.setValueAtTime(0.15, now + i * 0.06);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + i * 0.06);
+                    osc.stop(now + i * 0.06 + 0.25);
+                });
+            } else if (type === 'coin') {
+                // 🪙 Victory / Correct Guess Coin Jingle
+                [987.77, 1318.51].forEach((freq, i) => {
+                    let osc = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.09);
+                    gain.gain.setValueAtTime(0.2, now + i * 0.09);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + i * 0.09);
+                    osc.stop(now + i * 0.09 + 0.3);
+                });
+            } else if (type === 'sword' || type === 'penalty') {
+                // ⚔️ Sword Slash / Penalty Thud
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'click') {
+                // 🖱️ Crisp UI Menu Click
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.04);
+            }
+        }
+
+        // --- Retro Game Background Music Loop ---
+        let bgMusicInterval = null;
+        let isMusicPlaying = false;
+
+        function startBackgroundMusic() {
+            if (isMusicPlaying || !audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            isMusicPlaying = true;
+
+            // A peaceful, looping fantasy/Pokémon route-inspired chiptune arpeggio progression
+            const chordProgression = [
+                [523.25, 659.25, 783.99, 1046.50], // C Major
+                [440.00, 523.25, 659.25, 880.00], // A Minor
+                [349.23, 440.00, 523.25, 698.46], // F Major
+                [392.00, 493.88, 587.33, 783.99]  // G Major
+            ];
+
+            let chordIndex = 0;
+
+            bgMusicInterval = setInterval(() => {
+                if (!isMusicPlaying || audioCtx.state !== 'running') return;
+                
+                const now = audioCtx.currentTime;
+                const currentChord = chordProgression[chordIndex];
+
+                // Play gentle arpeggio notes for the active chord
+                currentChord.forEach((freq, i) => {
+                    let osc = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    
+                    // Triangle/Sine mix gives a softer, pleasant background synth pad feel
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + (i * 0.18));
+
+                    gain.gain.setValueAtTime(0.03, now + (i * 0.18)); // Kept very quiet so it's non-intrusive
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.18) + 0.35);
+
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+
+                    osc.start(now + (i * 0.18));
+                    osc.stop(now + (i * 0.18) + 0.35);
+                });
+
+                chordIndex = (chordIndex + 1) % chordProgression.length;
+            }, 1500); // Cycles every 1.5 seconds per chord
+        }
+
+        // Automatically start background music on the first user click or keystroke (satisfying browser autoplay policies)
+        document.addEventListener('pointerdown', () => {
+            startBackgroundMusic();
+        }, { once: true });
+
+        document.addEventListener('keydown', () => {
+            startBackgroundMusic();
+        }, { once: true });
+
+        // Attach click sounds to general buttons automatically
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => playSound('click'));
+            });
+        });
 
     } catch (err) {
         console.error("Error polling room status:", err);

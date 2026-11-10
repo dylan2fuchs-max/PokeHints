@@ -553,7 +553,7 @@ def submit_hint(room_code):
 
 @app.route("/room/<room_code>/skip", methods=["POST"])
 def skip_target_word(room_code):
-    """Allows the active Hinter to skip the current target word with a -2 points penalty."""
+    """Allows the active Hinter to skip and reroll the current target word with a -2 points penalty."""
     if room_code not in LOBBIES:
         return jsonify({"success": False, "error": "Room not found"}), 404
 
@@ -580,22 +580,27 @@ def skip_target_word(room_code):
     # Apply -2 point penalty for skipping
     current_hinter["score"] -= 2
 
-    # Advance to the next target word
-    room["current_word_index"] += 1
+    # Reroll a new word that isn't already in the target words list
+    existing_targets = set(target_words)
+    available_pool = [w for w in MASTER_POKEMON_DATABASE if w not in existing_targets]
     
-    round_complete = False
-    if room["current_word_index"] >= len(target_words):
-        round_complete = True
-        finalize_hinter_turn(room, current_hinter)
-        rotate_hinter_or_advance_round(room, room_code)
+    if available_pool:
+        new_word = random.choice(available_pool)
+    else:
+        # Fallback if pool is exhausted
+        new_word = random.choice(MASTER_POKEMON_DATABASE)
 
-    print(f"[SKIP] Hinter '{current_hinter['name']}' skipped '{skipped_word}' (-2 pts penalty).")
+    # Replace the current word with the newly rerolled word
+    target_words[current_idx] = new_word
+    room["target_words"] = target_words
+
+    print(f"[SKIP & REROLL] Hinter '{current_hinter['name']}' skipped '{skipped_word}' (-2 pts penalty) and rerolled new target: '{new_word}'.")
 
     return jsonify({
         "success": True,
         "skipped_word": skipped_word,
-        "round_complete": round_complete,
-        "current_word_index": room["current_word_index"]
+        "new_word": new_word,
+        "current_word_index": current_idx
     })
 
 @app.route("/room/<room_code>/play-again")
