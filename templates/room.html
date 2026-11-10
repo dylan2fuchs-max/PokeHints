@@ -391,16 +391,21 @@
                 <div id="targetListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
                     {% for target in target_words %}
                     <div class="target-item" style="display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;">
-                        <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; flex: 1;">
+                        
+                        <!-- Bulbapedia Link Wrapper -->
+                        <a href="https://bulbapedia.bulbagarden.net/wiki/{{ target | replace(' ', '_') }}" target="_blank" style="display: flex; align-items: center; gap: 8px; text-decoration: none; flex: 1; overflow: hidden;" title="Open on Bulbapedia">
                             <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">{{ loop.index }}</span>
                             
-                            <!-- Visual Sprite Helper Icon Added Here -->
-                            <img src="https://play.pokemonshowdown.com/sprites/dex/{{ target | lower | replace(' ', '') }}.png" 
-                                 style="width: 24px; height: 24px; object-fit: contain;" 
-                                 onerror="this.style.display='none'" title="Visual Hint Helper" />
+                            <!-- Small Thumbnail Preview Button -->
+                            <button type="button" onclick="event.preventDefault(); showSpriteModal('{{ target }}');" style="background: #333; border: 1px solid #555; border-radius: 4px; padding: 2px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Preview Image">
+                                <img src="https://play.pokemonshowdown.com/sprites/dex/{{ target | lower | replace(' ', '') }}.png" 
+                                    style="width: 24px; height: 24px; object-fit: contain;" 
+                                    onerror="this.style.display='none'" />
+                            </button>
 
-                            <span class="target-text" style="background: transparent !important; color: #fff !important; font-size: 0.9rem; font-weight: bold;">{{ target }}</span>
-                        </div>
+                            <span class="target-text" style="background: transparent !important; color: #ffcc00 !important; font-size: 0.9rem; font-weight: bold;">{{ target }} ↗</span>
+                        </a>
+                        
                         <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: #333; color: #aaa;">Unsolved</span>
                     </div>
                     {% endfor %}
@@ -414,6 +419,21 @@
                     🤫 You are a <b>Guesser</b>.<br>Listen to clues and type your guesses below!
                 </div>
             {% endif %}
+        </div>
+
+        <!-- Bulbapedia / Sprite Preview Modal Overlay -->
+        <div id="spriteModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center;">
+            <div style="background: #222; width: 80%; max-width: 700px; height: 80vh; padding: 15px; border-radius: 10px; border: 2px solid #ffcc00; display: flex; flex-direction: column; box-shadow: 0 5px 25px rgba(0,0,0,0.7);">
+                <!-- Modal Header -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 id="modalTargetName" style="color: #ffcc00; text-transform: uppercase; font-size: 1.1rem;">Preview</h3>
+                    <button type="button" onclick="closeSpriteModal()" style="background-color: #d9534f; color: white; border: none; padding: 6px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">Minimize / Close ✕</button>
+                </div>
+                <!-- Modal Content Frame (Loads Bulbapedia wiki directly) -->
+                <div style="flex: 1; background: #fff; border-radius: 6px; overflow: hidden;">
+                    <iframe id="modalWikiFrame" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+                </div>
+            </div>
         </div>
 
             <script>
@@ -522,6 +542,7 @@
                 {% endfor %}
             </datalist>
             <button type="submit" id="submitBtn">{% if is_hinter %}Send Hint{% else %}Submit{% endif %}</button>
+            <button type="button" id="skipWordBtn" onclick="skipTargetWord()" style="display: none; background-color: #d9534f; color: white; border: none; border-radius: 6px; padding: 0 15px; font-weight: bold; cursor: pointer; font-size: 0.9rem;">Skip (-2)</button>
         </form>
     </div>
 
@@ -574,9 +595,64 @@
         `).join('');
     }
 
+    function showSpriteModal(targetName) {
+        const modal = document.getElementById('spriteModal');
+        const nameDisplay = document.getElementById('modalTargetName');
+        const wikiFrame = document.getElementById('modalWikiFrame');
+
+        if (modal && nameDisplay && wikiFrame) {
+            nameDisplay.textContent = targetName;
+            
+            // Format target name for Bulbapedia URL (e.g., "Pallet Town" -> "Pallet_Town")
+            const formattedName = targetName.trim().replace(/\s+/g, '_');
+            wikiFrame.src = `https://bulbapedia.bulbagarden.net/wiki/${formattedName}`;
+            
+            modal.style.display = 'flex';
+        }
+    }
+
+    function closeSpriteModal() {
+        const modal = document.getElementById('spriteModal');
+        const wikiFrame = document.getElementById('modalWikiFrame');
+        if (modal) {
+            modal.style.display = 'none';
+            if (wikiFrame) wikiFrame.src = ""; // Clear frame source so it stops loading/playing audio in background
+        }
+    }
+
     function removeReusedWord(index) {
         selectedReusedWords.splice(index, 1);
         renderReusedTags();
+    }
+
+    async function skipTargetWord() {
+        const skipBtn = document.getElementById('skipWordBtn');
+        if (skipBtn) skipBtn.disabled = true;
+
+        try {
+            let response = await fetch(`/room/${roomCode}/skip`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" }
+            });
+
+            let result = await response.json();
+            if (response.ok) {
+                if (!result.success) {
+                    alert(result.error || result.message || "Failed to skip word.");
+                } else {
+                    console.log(`Hinter skipped word: ${result.skipped_word}`);
+                    if (result.round_complete) {
+                        location.reload();
+                    }
+                }
+            } else {
+                alert(result.error || "Action failed.");
+            }
+        } catch (err) {
+            console.error("Error skipping word:", err);
+        } finally {
+            if (skipBtn) skipBtn.disabled = false;
+        }
     }
 
     async function submitAction(event) {
@@ -669,163 +745,169 @@
         }
     }
 
-    // Periodic Polling to sync player list, target words, and game state live
     setInterval(async () => {
-        try {
-            let response = await fetch(`/room/${roomCode}/api/status`);
-            if (!response.ok) return;
-            
-            let data = await response.json();
+    try {
+        let response = await fetch(`/room/${roomCode}/api/status`);
+        if (!response.ok) return;
+        
+        let data = await response.json();
 
-            if (initialStatus === "waiting" && data.status === "in_game") {
+        if (initialStatus === "waiting" && data.status === "in_game") {
+            window.location.reload();
+            return;
+        }
+
+        if (window.lastWordIndex === 0 && data.current_word_index > 0) {
+            window.lastWordIndex = data.current_word_index;
+        }
+        if (window.lastRound === 1 && data.current_round > 1) {
+            window.lastRound = data.current_round;
+        }
+
+        if (data.status === "game_over") {
+            window.location.href = `/room/${roomCode}/victory`;
+            return;
+        }
+
+        if (data.status === "in_game") {
+            if (data.current_word_index < window.lastWordIndex || data.current_round > window.lastRound) {
                 window.location.reload();
                 return;
             }
-
-            if (window.lastWordIndex === 0 && data.current_word_index > 0) {
-                window.lastWordIndex = data.current_word_index;
-            }
-            if (window.lastRound === 1 && data.current_round > 1) {
-                window.lastRound = data.current_round;
-            }
-
-            if (data.status === "game_over") {
-                window.location.href = `/room/${roomCode}/victory`;
-                return;
-            }
-
-            if (data.status === "in_game") {
-                if (data.current_word_index < window.lastWordIndex || data.current_round > window.lastRound) {
-                    window.location.reload();
-                    return;
-                }
-            }
-
-            let statusDisplay = document.getElementById("roomStatusDisplay");
-            if (statusDisplay) {
-                statusDisplay.textContent = data.status.toUpperCase();
-            }
-
-            // Update the 40-box hint grid dynamically
-            if (data.hint_boxes) {
-                const isHinter = checkIsHinter();
-                data.hint_boxes.forEach((hintText, index) => {
-                    let boxNum = index + 1;
-                    let boxElement = document.getElementById(`grid-box-${boxNum}`);
-                    if (boxElement) {
-                        let textDiv = boxElement.querySelector('.grid-text');
-                        if (textDiv && hintText && hintText.trim() !== "") {
-                            textDiv.textContent = hintText;
-                            boxElement.classList.remove('empty');
-                            boxElement.classList.add('filled');
-                            
-                            if (isHinter) {
-                                boxElement.style.cursor = 'pointer';
-                                boxElement.onclick = () => {
-                                    if (hintText) {
-                                        let wordsInBox = hintText.split(/\s+/);
-                                        wordsInBox.forEach(word => {
-                                            if (word && !selectedReusedWords.includes(word)) {
-                                                selectedReusedWords.push(word);
-                                            }
-                                        });
-                                        renderReusedTags();
-                                    }
-                                };
-                            }
-                        } else if (textDiv) {
-                            textDiv.textContent = "";
-                            boxElement.classList.remove('filled');
-                            boxElement.classList.add('empty');
-                            boxElement.style.cursor = 'default';
-                            boxElement.onclick = null;
-                        }
-                    }
-                });
-            }
-
-            // Update Latest Hint Display using the stored full hint phrase from the server
-            let latestHintDisplay = document.getElementById('latestHintDisplay');
-            if (latestHintDisplay) {
-                if (data.latest_hint && data.latest_hint.trim() !== "") {
-                    latestHintDisplay.textContent = data.latest_hint;
-                } else {
-                    latestHintDisplay.textContent = "Waiting for hinter's clue...";
-                }
-            }
-
-            // Dynamically update the Hinter's Target Words sidebar list
-            let targetListContainer = document.getElementById('targetListContainer');
-            if (targetListContainer && data.target_words && data.target_words.length > 0) {
-                const currentIdx = data.current_word_index;
-                const solvedWords = data.solved_words || [];
-
-                targetListContainer.innerHTML = data.target_words.map((target, idx) => {
-                    const isSolved = solvedWords.includes(target);
-                    const isActive = (idx === currentIdx && !isSolved);
-
-                    let statusBg = "#333";
-                    let statusColor = "#aaa";
-                    let statusText = "Unsolved";
-                    let itemBorder = "1px solid #333";
-
-                    if (isSolved) {
-                        statusBg = "rgba(40, 167, 69, 0.2)";
-                        statusColor = "#28a745";
-                        statusText = "Solved ✓";
-                        itemBorder = "1px solid #28a745";
-                    } else if (isActive) {
-                        statusBg = "rgba(255, 204, 0, 0.1)";
-                        statusColor = "#ffcc00";
-                        statusText = "Active ➔";
-                        itemBorder = "2px solid #ffcc00";
-                    }
-
-                    return `
-                        <div class="target-item" style="border: ${itemBorder}; background-color: ${statusBg}; display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px;">
-                            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
-                                <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">${idx + 1}</span>
-                                <span class="target-text" style="background: transparent !important; color: #fff !important; font-size: 0.9rem; font-weight: bold;">${target}</span>
-                            </div>
-                            <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${statusBg}; color: ${statusColor};">${statusText}</span>
-                        </div>
-                    `;
-                }).join('');
-            }
-
-            // Update Solved Words list for Guessers on the right sidebar
-            let solvedContainer = document.getElementById('solvedWordsContainer');
-            if (solvedContainer && data.solved_words) {
-                solvedContainer.innerHTML = data.solved_words.map((word, idx) => `
-                    <div style="background: #2a2a2a; padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; color: #28a745; font-weight: bold;">
-                        ${idx + 1}. ${word}
-                    </div>
-                `).join('');
-            }
-
-            // Update player bar container including live guess pop-ups
-            let playerContainer = document.querySelector(".player-bar-container");
-            if (playerContainer && data.players) {
-                playerContainer.innerHTML = data.players.map((p, idx) => `
-                    <div class="player-card ${p.is_hinter ? 'hinter' : ''}" id="player-card-${idx + 1}">
-                        <div class="crown-icon">👑</div>
-                        <div class="player-avatar-box">
-                            <img src="${p.icon}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.replaceWith('👤')" />
-                        </div>
-                        <div class="player-info">
-                            <span class="player-name-display">${p.name}</span>
-                            <span class="player-score-display">Score: ${p.score}</span>
-                        </div>
-                        ${!p.is_hinter ? `
-                        <div class="player-guess-box" id="guess-box-${idx + 1}">
-                            <span class="guess-text">${p.last_guess || 'Waiting...'}</span>
-                        </div>` : ''}
-                    </div>
-                `).join('');
-            }
-
-        } catch (err) {
-            console.error("Error polling room status:", err);
         }
-    }, 2000);
+
+        let statusDisplay = document.getElementById("roomStatusDisplay");
+        if (statusDisplay) {
+            statusDisplay.textContent = data.status.toUpperCase();
+        }
+
+        // Update the 40-box hint grid dynamically
+        if (data.hint_boxes) {
+            const isHinter = checkIsHinter();
+            data.hint_boxes.forEach((hintText, index) => {
+                let boxNum = index + 1;
+                let boxElement = document.getElementById(`grid-box-${boxNum}`);
+                if (boxElement) {
+                    let textDiv = boxElement.querySelector('.grid-text');
+                    if (textDiv && hintText && hintText.trim() !== "") {
+                        textDiv.textContent = hintText;
+                        boxElement.classList.remove('empty');
+                        boxElement.classList.add('filled');
+                        
+                        if (isHinter) {
+                            boxElement.style.cursor = 'pointer';
+                            boxElement.onclick = () => {
+                                if (hintText) {
+                                    let wordsInBox = hintText.split(/\s+/);
+                                    wordsInBox.forEach(word => {
+                                        if (word && !selectedReusedWords.includes(word)) {
+                                            selectedReusedWords.push(word);
+                                        }
+                                    });
+                                    renderReusedTags();
+                                }
+                            };
+                        }
+                    } else if (textDiv) {
+                        textDiv.textContent = "";
+                        boxElement.classList.remove('filled');
+                        boxElement.classList.add('empty');
+                        boxElement.style.cursor = 'default';
+                        boxElement.onclick = null;
+                    }
+                }
+            });
+        }
+
+        // Update Latest Hint Display using the stored full hint phrase from the server
+        let latestHintDisplay = document.getElementById('latestHintDisplay');
+        if (latestHintDisplay) {
+            if (data.latest_hint && data.latest_hint.trim() !== "") {
+                latestHintDisplay.textContent = data.latest_hint;
+            } else {
+                latestHintDisplay.textContent = "Waiting for hinter's clue...";
+            }
+        }
+
+        // Dynamically update the Hinter's Target Words sidebar list
+        let targetListContainer = document.getElementById('targetListContainer');
+        if (targetListContainer && data.target_words && data.target_words.length > 0) {
+            const currentIdx = data.current_word_index;
+            const solvedWords = data.solved_words || [];
+
+            targetListContainer.innerHTML = data.target_words.map((target, idx) => {
+                const isSolved = solvedWords.includes(target);
+                const isActive = (idx === currentIdx && !isSolved);
+
+                let statusBg = "#333";
+                let statusColor = "#aaa";
+                let statusText = "Unsolved";
+                let itemBorder = "1px solid #333";
+
+                if (isSolved) {
+                    statusBg = "rgba(40, 167, 69, 0.2)";
+                    statusColor = "#28a745";
+                    statusText = "Solved ✓";
+                    itemBorder = "1px solid #28a745";
+                } else if (isActive) {
+                    statusBg = "rgba(255, 204, 0, 0.1)";
+                    statusColor = "#ffcc00";
+                    statusText = "Active ➔";
+                    itemBorder = "2px solid #ffcc00";
+                }
+
+                return `
+                    <div class="target-item" style="border: ${itemBorder}; background-color: ${statusBg}; display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px;">
+                        <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
+                            <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">${idx + 1}</span>
+                            <span class="target-text" style="background: transparent !important; color: #fff !important; font-size: 0.9rem; font-weight: bold;">${target}</span>
+                        </div>
+                        <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${statusBg}; color: ${statusColor};">${statusText}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update Solved Words list for Guessers on the right sidebar
+        let solvedContainer = document.getElementById('solvedWordsContainer');
+        if (solvedContainer && data.solved_words) {
+            solvedContainer.innerHTML = data.solved_words.map((word, idx) => `
+                <div style="background: #2a2a2a; padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; color: #28a745; font-weight: bold;">
+                    ${idx + 1}. ${word}
+                </div>
+            `).join('');
+        }
+
+        // Update player bar container including live guess pop-ups
+        let playerContainer = document.querySelector(".player-bar-container");
+        if (playerContainer && data.players) {
+            playerContainer.innerHTML = data.players.map((p, idx) => `
+                <div class="player-card ${p.is_hinter ? 'hinter' : ''}" id="player-card-${idx + 1}">
+                    <div class="crown-icon">👑</div>
+                    <div class="player-avatar-box">
+                        <img src="${p.icon}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.replaceWith('👤')" />
+                    </div>
+                    <div class="player-info">
+                        <span class="player-name-display">${p.name}</span>
+                        <span class="player-score-display">Score: ${p.score}</span>
+                    </div>
+                    ${!p.is_hinter ? `
+                    <div class="player-guess-box" id="guess-box-${idx + 1}">
+                        <span class="guess-text">${p.last_guess || 'Waiting...'}</span>
+                    </div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Toggle Skip button visibility dynamically based on hinter status updates
+        const isHinterNow = checkIsHinter();
+        const skipBtn = document.getElementById('skipWordBtn');
+        if (skipBtn) {
+            skipBtn.style.display = isHinterNow ? 'block' : 'none';
+        }
+
+    } catch (err) {
+        console.error("Error polling room status:", err);
+    }
+}, 2000);
 </script>

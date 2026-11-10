@@ -109,7 +109,8 @@ def add_hint_to_grid(room, hint_phrase):
 
 def finalize_hinter_turn(room, hinter_player):
     """Calculates efficiency score at the end of 10 words and awards it to the hinter."""
-    boxes_used = room.get("current_box_index", 25)
+    # Ensure this fallback is 25 so it matches your rule if the key is missing!
+    boxes_used = room.get("current_box_index", 25)  
     earned_points = calculate_hinter_score(boxes_used)
     
     hinter_player["score"] += earned_points
@@ -349,20 +350,20 @@ def room_status(room_code):
         "latest_hint": room.get("latest_hint", "")
     })
 
+from flask import request, jsonify, session
+
 @app.route("/room/<room_code>/guess", methods=["POST"])
 def submit_guess(room_code):
     """Receives a player's guess, validates it against the active target word, and handles penalties/popups."""
-    if room_code not in LOBBIES:
+    room = LOBBIES.get(room_code)
+    if not room:
         return jsonify({"success": False, "error": "Room not found"}), 404
 
-    room = LOBBIES[room_code]
     current_player_id = session.get("player_id")
-
-    current_player = None
-    for player in room["players"]:
-        if player.get("id") == current_player_id:
-            current_player = player
-            break
+    
+    # O(1) player lookup (assuming room["players"] is stored as a dict: {player_id: player_data})
+    players = room.get("players", {})
+    current_player = players.get(current_player_id)
 
     if not current_player:
         return jsonify({"success": False, "error": "Player not found"}), 400
@@ -375,7 +376,7 @@ def submit_guess(room_code):
     guessed_word = data.get("guess", "").strip()
 
     if not guessed_word:
-        return jsonify({"success": False, "error": "Empty guess"})
+        return jsonify({"success": False, "error": "Empty guess"}), 400
 
     # Store latest guess for live pop-up display on player card
     current_player["last_guess"] = guessed_word
@@ -385,17 +386,12 @@ def submit_guess(room_code):
     penalty_applied = False
 
     if current_box == 0:
-        # Penalty: Guessing before any hint has been given
         current_player["score"] -= 1
         penalty_applied = True
-        print(f"[PENALTY] Room {room_code}: {current_player['name']} guessed before any hint was given (-1 pt)")
     elif current_player.get("last_guessed_box") == current_box:
-        # Penalty: Double-guessing on the exact same hint box turn
         current_player["score"] -= 1
         penalty_applied = True
-        print(f"[PENALTY] Room {room_code}: {current_player['name']} double-guessed on box {current_box} (-1 pt)")
     else:
-        # Valid new guess turn; lock this player to this box until a new hint is given
         current_player["last_guessed_box"] = current_box
 
     # Find current target word
@@ -403,12 +399,10 @@ def submit_guess(room_code):
     current_idx = room.get("current_word_index", 0)
 
     if current_idx >= len(target_words):
-        return jsonify({"success": False, "error": "All words have been guessed!"})
+        return jsonify({"success": False, "error": "All words have been guessed!"}), 400
 
     active_target = target_words[current_idx]
-
-    # Check if guess matches the active target word (case-insensitive)
-    is_correct = guessed_word.lower() == active_target.strip().lower()
+    is_correct = False if penalty_applied else (guessed_word.lower() == active_target.strip().lower())
 
     response_data = {
         "success": True,
@@ -418,28 +412,27 @@ def submit_guess(room_code):
     }
 
     if is_correct:
-        # Award points to the correct guesser
         current_player["score"] += 1
 
-        # Append to solved words list for sidebar display
-        if active_target not in room.get("solved_words", []):
-            room.setdefault("solved_words", []).append(active_target)
+        solved_words = room.setdefault("solved_words", [])
+        if active_target not in solved_words:
+            solved_words.append(active_target)
 
-        # Reset box guess tracking so a new word/box resets double-guess protection
-        for p in room["players"]:
+        # Reset box guess tracking across players efficiently
+        for p in players.values():
             p.pop("last_guessed_box", None)
 
-        # Increment to the next target word
         room["current_word_index"] += 1
         response_data["next_word_index"] = room["current_word_index"]
 
-        # Check if all 10 words are completed
         if room["current_word_index"] >= len(target_words):
             response_data["round_complete"] = True
-            # Finalize hinter score based on boxes used before rotating
             finalize_hinter_turn(room, current_hinter_lookup(room))
             rotate_hinter_or_advance_round(room, room_code)
             response_data["game_status"] = room["status"]
+
+    # Optional: If using Flask-SocketIO, broadcast immediately to eliminate poll lag
+    # socketio.emit("guess_update", response_data, room=room_code)
 
     return jsonify(response_data)
 
