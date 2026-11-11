@@ -251,12 +251,14 @@
                 <input type="text" name="room_code" placeholder="Enter 7-Digit Code..." style="text-transform: uppercase;" required>
                 <button type="submit" class="btn-join">Join Private Lobby</button>
             </form>
+            
+        <!-- 📖 Rules & How to Play Button (Cleanly contained inside) -->
+            <div style="margin-top: 6px;">
+                <a href="{{ url_for('game_rules') }}" style="text-decoration: none;">
+                    <button type="button" style="background-color: #2a2a2a; color: #ccc; border: 1px solid #444;" onmouseover="this.style.background='#333'; this.style.color='#fff';" onmouseout="this.style.background='#2a2a2a'; this.style.color='#ccc';">📖 How to Play & Rules</button>
+                </a>
+            </div>
         </div>
-    </div>
-    <div class="action-buttons" style="margin-top: 10px;">
-        <a href="{{ url_for('game_rules') }}" style="text-decoration: none;">
-            <button type="button" style="background-color: #444; color: #fff;">📖 How to Play & Rules</button>
-        </a>
     </div>
 
     <script>

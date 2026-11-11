@@ -359,10 +359,13 @@
         <div class="room-title">PokeHints | Lobby Code: <span style="color:#fff;">{{ room_code }}</span></div>
         <div style="display: flex; gap: 15px; align-items: center; font-size: 0.9rem;">
             
-            <!-- ⏱️ New Hinter Countdown Timer Display -->
-            <div style="background: #111; border: 1px solid #444; padding: 4px 10px; border-radius: 4px;">
-                Hinter Timer: <span id="hinterTimerDisplay" style="color: #ff9900; font-weight: bold;">30s</span>
+            {% if room.competitive_timer %}
+            <!-- ⏱️ Universal Competitive Timer Display -->
+            <div style="background: #111; border: 1px solid #444; padding: 4px 10px; border-radius: 4px; display: flex; gap: 6px; align-items: center;">
+                <span id="timerLabel" style="color: #ccc; font-size: 0.85rem;">Timer</span>: 
+                <span id="hinterTimerDisplay" style="color: #ff9900; font-weight: bold;">30s</span>
             </div>
+            {% endif %}
 
             <button type="button" onclick="toggleMusic()" id="musicToggleBtn" style="background: #222; border: 1px solid #444; color: #ffcc00; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold;">
                 🎵 Music: OFF
@@ -535,6 +538,33 @@
 
     </div>
 
+    {% if room.status == 'waiting' %}
+    <!-- 🕒 LOBBY WAITING ROOM VIEW -->
+    <div style="text-align: center; padding: 40px; background: #111; border: 2px solid #333; border-radius: 8px; margin: 40px auto; max-width: 500px;">
+        <h2 style="color: #ffcc00; margin-bottom: 15px;">Lobby Waiting Room</h2>
+        <p style="color: #aaa; margin-bottom: 20px;">All players must click Ready to begin the match and start the timer!</p>
+        <button type="button" id="readyBtn" onclick="toggleReady()" style="background-color: #555; color: #fff; padding: 12px 24px; font-size: 1rem; border-radius: 6px; font-weight: bold; cursor: pointer; border: none;">
+            Ready Up ⏱️
+        </button>
+    </div>
+    <script>
+        async function toggleReady() {
+            let res = await fetch(`/room/{{ room_code }}/ready`, { method: "POST" });
+            let data = await res.json();
+            if (data.success) {
+                const btn = document.getElementById('readyBtn');
+                if (data.is_ready) {
+                    btn.style.backgroundColor = "#28a745";
+                    btn.textContent = "Ready! ✓ (Waiting for others)";
+                } else {
+                    btn.style.backgroundColor = "#555";
+                    btn.textContent = "Ready Up ⏱️";
+                }
+            }
+        }
+    </script>
+{% else %}
+    <!-- 🎮 ACTIVE GAME PLAY VIEW -->
     <div style="background: #111; padding: 10px; text-align: center; border-top: 2px solid #333; color: #ffcc00; font-weight: bold; font-size: 1.05rem;">
         Active Hint: <span id="latestHintDisplay" style="color: #fff; font-weight: normal;">Waiting for hinter's clue...</span>
     </div>
@@ -566,24 +596,25 @@
     </div>
 
     <div class="player-bar-container">
-    {% for player in room.players %}
-    <div class="player-card {% if player.is_hinter %}hinter{% endif %}" id="player-card-{{ loop.index }}">
-        <div class="crown-icon">👑</div>
-        <div class="player-avatar-box">
-            <img src="{{ player.icon }}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.replaceWith('👤')" />
+        {% for player in room.players %}
+        <div class="player-card {% if player.is_hinter %}hinter{% endif %}" id="player-card-{{ loop.index }}">
+            <div class="crown-icon">👑</div>
+            <div class="player-avatar-box">
+                <img src="{{ player.icon }}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.replaceWith('👤')" />
+            </div>
+            <div class="player-info">
+                <span class="player-name-display">{{ player.name }}</span>
+                <span class="player-score-display">{{ player.score }} pts</span>
+            </div>
+            {% if not player.is_hinter %}
+            <div class="player-guess-box" id="guess-box-{{ loop.index }}" style="font-size: 0.85rem; color: #aaa;">
+                <span class="guess-text">{{ player.last_guess or 'Waiting...' }}</span>
+            </div>
+            {% endif %}
         </div>
-        <div class="player-info">
-            <span class="player-name-display">{{ player.name }}</span>
-            <span class="player-score-display">{{ player.score }} pts</span>
-        </div>
-        {% if not player.is_hinter %}
-        <div class="player-guess-box" id="guess-box-{{ loop.index }}" style="font-size: 0.85rem; color: #aaa;">
-            <span class="guess-text">{{ player.last_guess or 'Waiting...' }}</span>
-        </div>
-        {% endif %}
+        {% endfor %}
     </div>
-    {% endfor %}
-</div>
+{% endif %}
 
 <script>
     const roomCode = "{{ room_code }}";
@@ -1131,19 +1162,31 @@
                 statusDisplay.textContent = data.status.toUpperCase();
             }
 
-            // --- ⏱️ UPDATE HINTER COUNTDOWN TIMER ---
+            // --- UPDATE UNIVERSAL PHASE TIMER & NAME TAG ---
+            const timerLabel = document.getElementById('timerLabel');
             const timerDisplay = document.getElementById('hinterTimerDisplay');
+            
             if (timerDisplay && data.hinter_time_remaining !== undefined) {
-                timerDisplay.textContent = `${data.hinter_time_remaining}s`;
-                
-                // Turn text bright red when 5 seconds or less remain
-                if (data.hinter_time_remaining <= 5) {
-                    timerDisplay.style.color = '#ff3333';
+                if (data.status === "waiting") {
+                    timerLabel.textContent = "Status";
+                    timerDisplay.textContent = "Waiting for Ready";
+                    timerDisplay.style.color = "#888";
                 } else {
-                    timerDisplay.style.color = '#ff9900';
+                    timerDisplay.textContent = `${data.hinter_time_remaining}s`;
+                    
+                    if (data.turn_phase === 'hinter') {
+                        timerLabel.textContent = `Hinter: ${data.hinter_name}`;
+                        timerDisplay.style.color = '#ff9900';
+                    } else {
+                        timerLabel.textContent = `Guessers Turn`;
+                        timerDisplay.style.color = '#28a745';
+                    }
+                    
+                    if (data.hinter_time_remaining <= 5) {
+                        timerDisplay.style.color = '#ff3333';
+                    }
                 }
             }
-            // ----------------------------------------
 
             // Update the 40-box hint grid dynamically
             if (data.hint_boxes) {
