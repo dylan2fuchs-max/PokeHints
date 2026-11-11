@@ -253,6 +253,11 @@
             </form>
         </div>
     </div>
+    <div class="action-buttons" style="margin-top: 10px;">
+        <a href="{{ url_for('game_rules') }}" style="text-decoration: none;">
+            <button type="button" style="background-color: #444; color: #fff;">📖 How to Play & Rules</button>
+        </a>
+    </div>
 
     <script>
         let selectedIconValue = "{{ url_for('static', filename='Default 1.png') }}";

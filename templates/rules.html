@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokeHints - Rules & Guide</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-image: radial-gradient(#2a2a2a 1px, transparent 1px);
+            background-size: 20px 20px;
+            padding: 20px;
+        }
+
+        .rules-container {
+            background: #111;
+            padding: 30px;
+            border-radius: 12px;
+            border: 2px solid #333;
+            width: 100%;
+            max-width: 650px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            text-align: left;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        h1 {
+            color: #ffcc00;
+            font-size: 2rem;
+            margin-bottom: 10px;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #aaa;
+            font-size: 0.9rem;
+            margin-bottom: 25px;
+        }
+
+        h2 {
+            color: #ffcc00;
+            font-size: 1.2rem;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 4px;
+        }
+
+        p, li {
+            color: #ccc;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+
+        ul {
+            padding-left: 20px;
+            margin-bottom: 12px;
+        }
+
+        .back-btn-container {
+            text-align: center;
+            margin-top: 25px;
+        }
+
+        .btn-back {
+            background-color: #ffcc00;
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.95rem;
+            text-decoration: none;
+            display: inline-block;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-back:hover {
+            background-color: #e6b800;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="rules-container">
+        <h1>PokeHints Guide</h1>
+        <div class="subtitle">Master the Pokémon word-guessing party game!</div>
+
+        <h2>🎯 Objective</h2>
+        <p>PokeHints is a multiplayer game where players take turns acting as the <strong>Hinter</strong> to guide their lobby through a series of secret Pokémon target words using a 40-box grid.</p>
+
+        <h2>👑 Roles & Gameplay</h2>
+        <ul>
+            <li><strong>The Hinter:</strong> Provides clues one word at a time. Can introduce one new word to the grid per clue or reuse unlocked words from previous turns by clicking them.</li>
+            <li><strong>The Guessers:</strong> Race to type and submit the correct target word. Each guesser gets one clean guess per box state.</li>
+        </ul>
+
+        <h2>📜 Core Rules & Restrictions</h2>
+        <ul>
+            <li><strong>3-Clue Streak Rule:</strong> If guessers fail to solve the target word within 3 hints, the Hinter <em>must</em> introduce at least one brand-new word to the 40-box grid on their 3rd clue.</li>
+            <li><strong>No Spoiler Hints:</strong> Hinters cannot use any part of the active target word inside their clue phrase.</li>
+            <li><strong>Tie-Handling:</strong> Simultaneous correct guesses submitted within a strict 0.1-second (100ms) window both earn points without disrupting board pacing.</li>
+        </ul>
+
+        <h2>🔥 Competitive Mode & Timers</h2>
+        <p>When <strong>Competitive Mode</strong> is enabled (mandatory in public lobbies, optional for private hosts):</p>
+        <ul>
+            <li><strong>30-Second Hinter Timer:</strong> Hinters have 30 seconds to submit a clue.</li>
+            <li><strong>Hostage Prevention:</strong> If the timer expires, the Hinter is heavily penalized (4 boxes burned with `(TIMEOUT)`), all guessers are awarded `+1` point, and the game automatically skips to the next word.</li>
+        </ul>
+
+        <div class="back-btn-container">
+            <a href="{{ url_for('index') }}" class="btn-back">⬅ Back to Home</a>
+        </div>
+    </div>
+
+</body>
+</html>

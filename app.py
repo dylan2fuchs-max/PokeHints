@@ -167,6 +167,11 @@ def index():
   """Main Menu: Choose from Public Lobby, Host Private, or Join Private."""
   return render_template("index.html")
 
+@app.route("/rules")
+def game_rules():
+    """Renders the game rules and guide page."""
+    return render_template("rules.html")
+
 @app.route('/sandbox')
 def chord_sandbox():
     return render_template('chorus_sandbox.html')
