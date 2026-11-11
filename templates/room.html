@@ -394,21 +394,19 @@
                 <div id="targetListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
                     {% for target in target_words %}
                     <div class="target-item" style="display: flex; align-items: center; justify-content: space-between; background: #1a1a1a; padding: 8px 12px; border-radius: 6px; border: 1px solid #333;">
-                        
-                        <!-- Bulbapedia Link Wrapper -->
-                        <a href="https://bulbapedia.bulbagarden.net/wiki/{{ target | replace(' ', '_') }}" target="_blank" style="display: flex; align-items: center; gap: 8px; text-decoration: none; flex: 1; overflow: hidden;" title="Open on Bulbapedia">
-                            <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">{{ loop.index }}</span>
-                            
-                            <!-- Small Thumbnail Preview Button -->
-                            <button type="button" onclick="event.preventDefault(); showSpriteModal('{{ target }}');" style="background: #333; border: 1px solid #555; border-radius: 4px; padding: 2px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Preview Image">
-                                <img src="https://play.pokemonshowdown.com/sprites/dex/{{ target | lower | replace(' ', '') }}.png"
-                                    style="width: 24px; height: 24px; object-fit: contain;"
-                                    onerror="this.style.display='none'" />
-                            </button>
-
-                            <span class="target-text" style="background: transparent !important; color: #ffcc00 !important; font-size: 0.9rem; font-weight: bold;">{{ target }} ↗</span>
-                        </a>
-                        
+                        {% if room.get('allow_wiki', False) %}
+                            <a href="https://bulbapedia.bulbagarden.net/wiki/{{ target | replace(' ', '_') }}" target="_blank" style="display: flex; align-items: center; justify-content: space-between; text-decoration: none; flex: 1; overflow: hidden;" title="Open on Bulbapedia">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">{{ loop.index }}</span>
+                                    <span class="target-text" style="background: transparent !important; color: #ffcc00 !important; font-size: 0.9rem; font-weight: bold;">{{ target }} ↗</span>
+                                </div>
+                            </a>
+                        {% else %}
+                            <div style="display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;">
+                                <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">{{ loop.index }}</span>
+                                <span class="target-text" style="background: transparent !important; color: #ffcc00 !important; font-size: 0.9rem; font-weight: bold;">{{ target }}</span>
+                            </div>
+                        {% endif %}
                         <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: #333; color: #aaa;">Unsolved</span>
                     </div>
                     {% endfor %}
@@ -606,6 +604,7 @@
 
         if (modal && nameDisplay && wikiFrame) {
             nameDisplay.textContent = targetName;
+            // Format spaces into underscores for Bulbapedia wiki URLs
             const formattedName = targetName.trim().replace(/\s+/g, '_');
             wikiFrame.src = `https://bulbapedia.bulbagarden.net/wiki/${formattedName}`;
             modal.style.display = 'flex';
@@ -617,7 +616,9 @@
         const wikiFrame = document.getElementById('modalWikiFrame');
         if (modal) {
             modal.style.display = 'none';
-            if (wikiFrame) wikiFrame.src = "";
+            if (wikiFrame) {
+                wikiFrame.src = ""; // Clears iframe so audio/video inside stops playing when minimized
+            }
         }
     }
 
@@ -1027,6 +1028,7 @@
             }
 
         } else {
+            // --- GUESSER SUBMISSION BLOCK ---
             if (!newWord) return;
             const endpoint = `/room/${roomCode}/guess`;
 
@@ -1038,18 +1040,28 @@
                 });
 
                 let result = await response.json();
+                
+                // Clear input field immediately on attempt
+                if (inputField) inputField.value = '';
+
                 if (response.ok) {
-                    if (inputField) inputField.value = '';
                     if (!result.success) {
                         alert(result.error || "Guess failed.");
                     } else {
                         if (result.penalty) {
                             playSound('penalty'); // ⚔️ Penalty thud for wrong/out-of-turn guess
                             alert("Penalty! -1 point for guessing out of turn or double guessing.");
-                        }
-                        if (result.correct) {
+                        } else if (result.correct) {
                             playSound('coin'); // 🪙 Coin / harp jingle for correct guess!
                             console.log("Correct guess registered!");
+                        } else {
+                            // Incorrect regular guess sound or subtle feedback if desired
+                            playSound('click');
+                        }
+                        
+                        // If round complete or puzzle solved, trigger a quick status check or reload if provided
+                        if (result.round_complete) {
+                            location.reload();
                         }
                     }
                 } else {
@@ -1151,6 +1163,7 @@
             if (targetListContainer && data.target_words && data.target_words.length > 0) {
                 const currentIdx = data.current_word_index;
                 const solvedWords = data.solved_words || [];
+                const allowWiki = data.allow_wiki || false; // <-- Grab room setting
 
                 targetListContainer.innerHTML = data.target_words.map((target, idx) => {
                     const isSolved = solvedWords.includes(target);
@@ -1173,12 +1186,26 @@
                         itemBorder = "2px solid #ffcc00";
                     }
 
+                    const wikiName = target.trim().replace(/\s+/g, '_');
+
+                    // Conditionally render wiki anchor or plain text
+                    const targetContentHtml = allowWiki ? `
+                        <a href="https://bulbapedia.bulbagarden.net/wiki/${wikiName}" target="_blank" style="display: flex; align-items: center; justify-content: space-between; text-decoration: none; flex: 1; overflow: hidden;" title="Open on Bulbapedia">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">${idx + 1}</span>
+                                <span class="target-text" style="background: transparent !important; color: #ffcc00 !important; font-size: 0.9rem; font-weight: bold;">${target} ↗</span>
+                            </div>
+                        </a>
+                    ` : `
+                        <div style="display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;">
+                            <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">${idx + 1}</span>
+                            <span class="target-text" style="background: transparent !important; color: #ffcc00 !important; font-size: 0.9rem; font-weight: bold;">${target}</span>
+                        </div>
+                    `;
+
                     return `
                         <div class="target-item" style="border: ${itemBorder}; background-color: ${statusBg}; display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px;">
-                            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
-                                <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">${idx + 1}</span>
-                                <span class="target-text" style="background: transparent !important; color: #fff !important; font-size: 0.9rem; font-weight: bold;">${target}</span>
-                            </div>
+                            ${targetContentHtml}
                             <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${statusBg}; color: ${statusColor};">${statusText}</span>
                         </div>
                     `;

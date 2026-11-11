@@ -192,6 +192,7 @@ def join_public_lobby():
             "rounds": 1,
             "max_players": 4,
             "status": "waiting",
+            "allow_wiki": False,  # Disabled for public games
         }
 
     room = LOBBIES[public_room_id]
@@ -231,15 +232,37 @@ def join_public_lobby():
 
     return redirect(url_for("game_room", room_code=public_room_id))
 
+def find_room(room_code):
+    """Safely retrieves a lobby regardless of spaces, underscores, or casing mismatches."""
+    if not room_code:
+        return None
+    
+    # 1. Direct match check
+    if room_code in LOBBIES:
+        return LOBBIES[room_code], room_code
+    
+    # 2. Flexible normalized match (handles space vs underscore differences)
+    norm_target = room_code.strip().upper().replace(" ", "_")
+    for key, room_data in LOBBIES.items():
+        if key.strip().upper().replace(" ", "_") == norm_target:
+            return room_data, key
+            
+    return None, None
+
 @app.route("/lobby/host", methods=["GET", "POST"])
 def host_private_lobby():
     """Allows a user to configure and host a private game lobby."""
+
+    custom_code = request.form.get("room_code", "").strip().upper()
+    room_code = custom_code if custom_code else generate_lobby_code()
+
     if request.method == "POST":
         custom_code = request.form.get("room_code", "").strip().upper()
         room_code = custom_code if custom_code else generate_lobby_code()
 
         max_players = int(request.form.get("max_players", 4))
         rounds = int(request.form.get("rounds", 1))
+        allow_wiki = request.form.get("allow_wiki") == "true"
         host_name = request.form.get("player_name", "HostTrainer")
         player_icon = request.form.get("player_icon", url_for('static', filename='Default 1.png'))
         if player_icon == "custom":
@@ -261,6 +284,7 @@ def host_private_lobby():
             "rounds": rounds,
             "max_players": max_players,
             "status": "waiting",
+            "allow_wiki": allow_wiki,  # Optional for private games
         }
 
         session["room_code"] = room_code
@@ -329,8 +353,8 @@ def join_private_lobby():
 
 @app.route("/room/<room_code>/api/status")
 def room_status(room_code):
-    """API endpoint for client polling to sync player joins, target words, and game status."""
-    if room_code not in LOBBIES:
+    room, canonical_code = find_room(room_code)
+    if not room:
         return jsonify({"error": "Room not found"}), 404
 
     room = LOBBIES[room_code]
@@ -345,6 +369,7 @@ def room_status(room_code):
         "players": room["players"],
         "max_players": room["max_players"],
         "host": room.get("host"),
+        "allow_wiki": room.get("allow_wiki", False),  # <-- Add this line
         "current_round": room.get("current_round", 1),
         "rounds": room.get("rounds", 1),
         "current_word_index": room.get("current_word_index", 0),
@@ -364,10 +389,14 @@ def submit_guess(room_code):
         return jsonify({"success": False, "error": "Room not found"}), 404
 
     current_player_id = session.get("player_id")
-    
-    # O(1) player lookup (assuming room["players"] is stored as a dict: {player_id: player_data})
-    players = room.get("players", {})
-    current_player = players.get(current_player_id)
+    players_data = room.get("players", [])
+
+    # Robust lookup supporting both list and dictionary storage for room["players"]
+    current_player = None
+    if isinstance(players_data, dict):
+        current_player = players_data.get(current_player_id)
+    elif isinstance(players_data, list):
+        current_player = next((p for p in players_data if p.get("id") == current_player_id or p.get("player_id") == current_player_id), None)
 
     if not current_player:
         return jsonify({"success": False, "error": "Player not found"}), 400
@@ -423,7 +452,12 @@ def submit_guess(room_code):
             solved_words.append(active_target)
 
         # Reset box guess tracking across players efficiently
-        for p in players.values():
+        if isinstance(players_data, dict):
+            iter_players = players_data.values()
+        else:
+            iter_players = players_data
+
+        for p in iter_players:
             p.pop("last_guessed_box", None)
 
         room["current_word_index"] += 1
@@ -434,9 +468,6 @@ def submit_guess(room_code):
             finalize_hinter_turn(room, current_hinter_lookup(room))
             rotate_hinter_or_advance_round(room, room_code)
             response_data["game_status"] = room["status"]
-
-    # Optional: If using Flask-SocketIO, broadcast immediately to eliminate poll lag
-    # socketio.emit("guess_update", response_data, room=room_code)
 
     return jsonify(response_data)
 

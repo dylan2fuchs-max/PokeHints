@@ -54,6 +54,13 @@
                     <option value="4" selected>4 Players</option>
                 </select>
             </div>
+            <!-- Add this inside your host_lobby.html form -->
+            <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" id="allow_wiki" name="allow_wiki" value="true" checked style="width: 18px; height: 18px; accent-color: #ffcc00;">
+                <label for="allow_wiki" style="color: #ffcc00; font-weight: bold; font-size: 0.95rem; cursor: pointer;">
+                    Enable Bulbapedia Wiki Help for Hinter
+                </label>
+            </div>
             <div class="form-group">
                 <label>Rounds (1 - 2)</label>
                 <select name="rounds">
