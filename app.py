@@ -121,11 +121,6 @@ def finalize_hinter_turn(room, hinter_player):
 def rotate_hinter_or_advance_round(room, room_code):
     """Rotates the hinter, handles round progression, or triggers game over."""
     players = room["players"]
-    
-    # 1. Finalize current hinter's box efficiency score
-    current_hinter = next((p for p in players if p.get("is_hinter")), None)
-    if current_hinter:
-        finalize_hinter_turn(room, current_hinter)
 
     # 2. Clear current hinter flags
     for p in players:
