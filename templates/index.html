@@ -224,12 +224,14 @@
                     
                     <!-- Custom Option Card (Usable in private lobbies, blocked in public) -->
                     <div class="icon-option" data-value="custom" onclick="selectIcon(this, true)" style="margin-top: 8px; flex-direction: row; justify-content: center; gap: 10px; padding: 10px;">
-                        <span style="font-size: 1.1rem;">🌐</span>
-                        <span style="font-weight: bold; color: #fff;">Custom Image URL (Private Matches Only)</span>
+                        <span style="font-size: 1.1rem;">📁</span>
+                        <span style="font-weight: bold; color: #fff;">Upload Local Image (Private Matches Only)</span>
                     </div>
 
                     <div class="custom-icon-container" id="customIconBox">
-                        <input type="url" id="customIconUrlInput" placeholder="https://example.com/avatar.png">
+                        <input type="file" id="customIconFileInput" accept="image/*" style="background: #222; border: 2px dashed #555; padding: 8px; border-radius: 6px; color: #ccc; width: 100%; cursor: pointer;">
+                        <!-- Hidden input to hold the processed Base64 string for form submission -->
+                        <input type="hidden" name="custom_icon_url" id="hiddenPrivateCustomUrl">
                     </div>
                 </div>
 
@@ -251,7 +253,7 @@
                 <input type="text" name="room_code" placeholder="Enter 7-Digit Code..." style="text-transform: uppercase;" required>
                 <button type="submit" class="btn-join">Join Private Lobby</button>
             </form>
-            
+
         <!-- 📖 Rules & How to Play Button (Cleanly contained inside) -->
             <div style="margin-top: 6px;">
                 <a href="{{ url_for('game_rules') }}" style="text-decoration: none;">
@@ -281,8 +283,18 @@
             }
         }
 
-        // Helper to pass name and icon data into private join form
-        function prepareJoinSubmit() {
+        // Helper to convert uploaded local file to Base64 data URL asynchronously
+        function getBase64Image(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // Unified private join submit helper supporting local file upload conversion
+        async function prepareJoinSubmit() {
             const nameValue = document.getElementById('playerName').value.trim();
             if (nameValue) {
                 document.getElementById('hiddenJoinName').value = nameValue;
@@ -291,7 +303,16 @@
             let finalIcon = selectedIconValue;
             if (isCustomSelected) {
                 finalIcon = 'custom';
-                document.getElementById('hiddenJoinCustomUrl').value = document.getElementById('customIconUrlInput').value.trim();
+                const fileInput = document.getElementById('customIconFileInput');
+                if (fileInput && fileInput.files && fileInput.files[0]) {
+                    try {
+                        const base64String = await getBase64Image(fileInput.files[0]);
+                        // Ensure this ID matches the hidden input id in your form!
+                        document.getElementById('hiddenJoinCustomUrl').value = base64String;
+                    } catch (err) {
+                        console.error("Error reading file:", err);
+                    }
+                }
             }
             document.getElementById('hiddenJoinIcon').value = finalIcon;
         }
@@ -306,12 +327,46 @@
                 return false;
             }
 
-            // Populate hidden inputs
+            // Populate hidden inputs for public form
             document.getElementById('hiddenPublicName').value = nameValue;
             document.getElementById('hiddenPublicIcon').value = selectedIconValue;
-            document.getElementById('hiddenPublicCustomUrl').value = document.getElementById('customIconUrlInput').value.trim();
+            document.getElementById('hiddenPublicCustomUrl').value = "";
             return true;
         }
+
+        // Helper to convert uploaded local file to Base64 data URL asynchronously
+    function getBase64Image(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
+    }
+
+    // Update prepareJoinSubmit for private room code joining
+    async function prepareJoinSubmit() {
+        const nameValue = document.getElementById('playerName').value.trim();
+        if (nameValue) {
+            document.getElementById('hiddenJoinName').value = nameValue;
+        }
+
+        let finalIcon = selectedIconValue;
+        if (isCustomSelected) {
+            finalIcon = 'custom';
+            const fileInput = document.getElementById('customIconFileInput');
+            if (fileInput.files && fileInput.files[0]) {
+                try {
+                    // Convert local image file to Base64 data string
+                    const base64String = await getBase64Image(fileInput.files[0]);
+                    document.getElementById('hiddenJoinCustomUrl').value = base64String;
+                } catch (err) {
+                    console.error("Error reading file:", err);
+                }
+            }
+        }
+        document.getElementById('hiddenJoinIcon').value = finalIcon;
+    }
     </script>
 </body>
 </html>

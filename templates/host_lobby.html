@@ -22,12 +22,14 @@
 <body>
     <div class="container">
         <h2>Host Private Lobby</h2>
-        <form action="{{ url_for('host_private_lobby') }}" method="POST">
+        <form action="{{ url_for('host_private_lobby') }}" method="POST" id="hostForm" onsubmit="prepareHostSubmit(event)">
+            
+            <!-- Trainer Name Input -->
             <div class="form-group">
-                <label>Trainer Name</label>
-                <input type="text" name="player_name" required placeholder="Your name...">
+                <label for="playerName">Trainer Name</label>
+                <input type="text" id="playerName" name="player_name" placeholder="Enter your trainer name..." required>
             </div>
-
+            
             <div class="form-group">
                 <label>Player Avatar Icon</label>
                 <select name="player_icon" id="iconSelect" onchange="toggleCustomIcon(this)">
@@ -35,18 +37,22 @@
                     <option value="{{ url_for('static', filename='Default 2.png') }}">Default 2</option>
                     <option value="{{ url_for('static', filename='Default 3.png') }}">Default 3</option>
                     <option value="{{ url_for('static', filename='Default 4.png') }}">Default 4</option>
-                    <option value="custom">🌐 Custom Image URL...</option>
+                    <option value="custom">📁 Upload Local Image...</option>
                 </select>
             </div>
 
+            <!-- Hidden input for base64 string -->
+            <input type="hidden" name="custom_icon_url" id="hiddenHostCustomUrl">
+
             <div class="form-group">
-                <input type="url" name="custom_icon_url" id="customIconInput" placeholder="https://example.com/avatar.png" style="display: none;" />
+                <input type="file" id="customIconFileInput" accept="image/*" style="display: none; background: #222; border: 2px dashed #555; padding: 8px; border-radius: 6px; color: #ccc; width: 100%; cursor: pointer;" />
             </div>
 
             <div class="form-group">
                 <label>Custom Lobby Code (Leave blank for random 7-digit)</label>
                 <input type="text" name="room_code" placeholder="e.g. MYLOBBY" style="text-transform: uppercase;">
             </div>
+
             <div class="form-group">
                 <label>Max Players (3 - 4)</label>
                 <select name="max_players">
@@ -54,20 +60,22 @@
                     <option value="4" selected>4 Players</option>
                 </select>
             </div>
-            <!-- Add this inside your host_lobby.html form -->
+
             <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
                 <input type="checkbox" id="allow_wiki" name="allow_wiki" value="true" checked style="width: 18px; height: 18px; accent-color: #ffcc00;">
                 <label for="allow_wiki" style="color: #ffcc00; font-weight: bold; font-size: 0.95rem; cursor: pointer;">
                     Enable Bulbapedia Wiki Help for Hinter
                 </label>
             </div>
+
             <div class="form-group" style="margin-bottom: 15px;">
                 <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #fff;">
                     <input type="checkbox" name="competitive_timer" value="true" style="width: 18px; height: 18px; accent-color: #ffcc00;">
-                    <span>🔥 Competitive Mode (30-second Hinter Timer & Timeouts)</span>
+                    <span>🔥 Competitive Mode (30-second Universal Timer & Timeouts)</span>
                 </label>
-                <small style="color: #aaa; display: block; margin-top: 4px;">Forces hinters to give clues within 30 seconds or face box penalties and guesser point awards.</small>
+                <small style="color: #aaa; display: block; margin-top: 4px;">Enforces alternating 30s timers for hinters and guessers with box penalties.</small>
             </div>
+
             <div class="form-group">
                 <label>Rounds (1 - 2)</label>
                 <select name="rounds">
@@ -75,23 +83,50 @@
                     <option value="2">2 Rounds</option>
                 </select>
             </div>
+
             <button type="submit">Create Lobby</button>
         </form>
         <a href="{{ url_for('index') }}" class="back-link">← Back to Main Menu</a>
     </div>
 
     <script>
-    function toggleCustomIcon(select) {
-        let customInput = document.getElementById('customIconInput');
-        if (select.value === 'custom') {
-            customInput.style.display = 'block';
-            customInput.required = true;
-        } else {
-            customInput.style.display = 'none';
-            customInput.required = false;
-            customInput.value = '';
+        function toggleCustomIcon(select) {
+            let fileInput = document.getElementById('customIconFileInput');
+            if (select.value === 'custom') {
+                fileInput.style.display = 'block';
+            } else {
+                fileInput.style.display = 'none';
+                fileInput.value = '';
+                document.getElementById('hiddenHostCustomUrl').value = '';
+            }
         }
-    }
+
+        function getBase64Image(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        async function prepareHostSubmit(event) {
+            const select = document.getElementById('iconSelect');
+            if (select.value === 'custom') {
+                const fileInput = document.getElementById('customIconFileInput');
+                if (fileInput.files && fileInput.files[0]) {
+                    event.preventDefault(); // Pause submission to read file
+                    try {
+                        const base64String = await getBase64Image(fileInput.files[0]);
+                        document.getElementById('hiddenHostCustomUrl').value = base64String;
+                        document.getElementById('hostForm').submit(); // Resume submission
+                    } catch (err) {
+                        console.error("Error reading file:", err);
+                        alert("Failed to read image file.");
+                    }
+                }
+            }
+        }
     </script>
 </body>
 </html>
