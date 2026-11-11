@@ -354,22 +354,16 @@
 </head>
 <body data-is-hinter="{{ 'true' if is_hinter else 'false' }}">
 
-    <!-- Header info -->
+    <!-- Top Bar / Game Info -->
     <div class="room-header">
         <div class="room-title">PokeHints | Lobby Code: <span style="color:#fff;">{{ room_code }}</span></div>
         <div style="display: flex; gap: 15px; align-items: center; font-size: 0.9rem;">
+            <button type="button" onclick="toggleMusic()" id="musicToggleBtn" style="background: #222; border: 1px solid #444; color: #ffcc00; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold;">
+                🎵 Music: OFF
+            </button>
             <span style="color: #aaa;">Trainer: <b style="color: #ffcc00;">{{ session.get('player_name', 'Trainer') }}</b></span>
             <div>Status: <span id="roomStatusDisplay" style="color: #28a745; font-weight:bold;">{{ room.status | upper }}</span></div>
         </div>
-    </div>
-
-    <!-- Inside your <div class="room-header"> -->
-    <div style="display: flex; gap: 15px; align-items: center; font-size: 0.9rem;">
-        <button type="button" onclick="toggleMusic()" id="musicToggleBtn" style="background: #222; border: 1px solid #444; color: #ffcc00; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold;">
-            🎵 Music: OFF
-        </button>
-        <span style="color: #aaa;">Trainer: <b style="color: #ffcc00;">{{ session.get('player_name', 'Trainer') }}</b></span>
-        <div>Status: <span id="roomStatusDisplay" style="color: #28a745; font-weight:bold;">{{ room.status | upper }}</span></div>
     </div>
 
     <!-- Main Game Screen Layout -->
@@ -407,8 +401,8 @@
                             
                             <!-- Small Thumbnail Preview Button -->
                             <button type="button" onclick="event.preventDefault(); showSpriteModal('{{ target }}');" style="background: #333; border: 1px solid #555; border-radius: 4px; padding: 2px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Preview Image">
-                                <img src="https://play.pokemonshowdown.com/sprites/dex/{{ target | lower | replace(' ', '') }}.png" 
-                                    style="width: 24px; height: 24px; object-fit: contain;" 
+                                <img src="https://play.pokemonshowdown.com/sprites/dex/{{ target | lower | replace(' ', '') }}.png"
+                                    style="width: 24px; height: 24px; object-fit: contain;"
                                     onerror="this.style.display='none'" />
                             </button>
 
@@ -537,12 +531,12 @@
         <div id="reusedTagsContainer" style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 600px; width: 100%; margin-bottom: 8px;"></div>
 
         <form id="guessForm" onsubmit="submitAction(event)" style="display: flex; gap: 10px; width: 100%; max-width: 600px; justify-content: center;">
-            <input 
-                type="text" 
-                id="wordInput" 
-                name="guess" 
-                placeholder="{% if is_hinter %}Type new word...{% else %}Guess the Pokémon, character, or item...{% endif %}" 
-                list="pokeList" 
+            <input
+                type="text"
+                id="wordInput"
+                name="guess"
+                placeholder="{% if is_hinter %}Type new word...{% else %}Guess the Pokémon, character, or item...{% endif %}"
+                list="pokeList"
                 autocomplete="off"
                 style="flex: 1;"
             >
@@ -612,11 +606,8 @@
 
         if (modal && nameDisplay && wikiFrame) {
             nameDisplay.textContent = targetName;
-            
-            // Format target name for Bulbapedia URL (e.g., "Pallet Town" -> "Pallet_Town")
             const formattedName = targetName.trim().replace(/\s+/g, '_');
             wikiFrame.src = `https://bulbapedia.bulbagarden.net/wiki/${formattedName}`;
-            
             modal.style.display = 'flex';
         }
     }
@@ -626,7 +617,242 @@
         const wikiFrame = document.getElementById('modalWikiFrame');
         if (modal) {
             modal.style.display = 'none';
-            if (wikiFrame) wikiFrame.src = ""; // Clear frame source so it stops loading/playing audio in background
+            if (wikiFrame) wikiFrame.src = "";
+        }
+    }
+
+    let bgMusicInterval = null;
+    let isMusicPlaying = false;
+    let droneOsc = null;
+    let droneGain = null;
+
+    async function startBackgroundMusic() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+        }
+        if (isMusicPlaying) return;
+        isMusicPlaying = true;
+
+        // Clean background ambiance drone
+        try {
+            droneOsc = audioCtx.createOscillator();
+            droneGain = audioCtx.createGain();
+            droneOsc.type = 'sine';
+            droneOsc.frequency.setValueAtTime(65.41, audioCtx.currentTime); // C2 deep root
+            droneGain.gain.setValueAtTime(0.01, audioCtx.currentTime);
+            droneOsc.connect(droneGain);
+            droneGain.connect(audioCtx.destination);
+            droneOsc.start();
+        } catch (e) {
+            console.log("Drone error:", e);
+        }
+
+        // Frequencies
+        const lowA = 110.00;
+        const lowD = 146.83;
+        const lowE = 164.81;
+        const lowG = 130.81;
+        const lowB = 123.47;
+        const noteC4 = 261.63;
+        const lowF3 = 174.61;
+
+        const highD = 587.33;
+        const highE = 659.25;
+        const highF = 698.46;
+        const highG = 783.99;
+        const highA = 880.00;
+        const pianoE4 = 659.25;
+        const pianoF4 = 698.46;
+        const pianoG4 = 783.99;
+
+        // Helper for regular 4/4 bars
+        const createBarEvents = (guitarNotes, pianoNotes, brassNotes = null) => [
+            { time: 0.0,  g: guitarNotes[0], p: pianoNotes[0], b: brassNotes ? brassNotes[0] : 0, dur: 0.45, drum: 'k' },
+            { time: 0.5,  g: guitarNotes[1], p: pianoNotes[1], b: brassNotes ? brassNotes[1] : 0, dur: 0.45, drum: 't' },
+            { time: 1.0,  g: guitarNotes[2], p: pianoNotes[2], b: brassNotes ? brassNotes[2] : 0, dur: 0.20, drum: 'k' },
+            { time: 1.25, g: guitarNotes[2], p: pianoNotes[2], b: brassNotes ? brassNotes[3] : 0, dur: 0.20, drum: 't' },
+            { time: 1.5,  g: guitarNotes[2], p: pianoNotes[2], b: brassNotes ? brassNotes[4] : 0, dur: 0.20, drum: 'k' },
+            { time: 1.75, g: guitarNotes[2], p: pianoNotes[2], b: brassNotes ? brassNotes[5] : 0, dur: 0.20, drum: 't' }
+        ];
+
+        // Standard & Swapped bars
+        const originalBar = createBarEvents([lowA, lowD, noteC4], [highD, highG, highA]);
+        const swappedBar  = createBarEvents([highD, highG, highA], [lowA, lowD, noteC4]);
+
+        // --- Updated 4-Bar Bridge Section (Piano & Guitar) ---
+    const bridgeBar1 = [
+        { time: 0.0,  g: highF, p: lowD, b: 0, dur: 0.20, drum: 'k' },
+        { time: 0.5,  g: highF, p: lowD, b: 0, dur: 0.20, drum: 't' },
+        { time: 1.0,  g: highG, p: lowD, b: 0, dur: 0.20, drum: 'k' },
+        { time: 1.25, g: highF, p: lowD, b: 0, dur: 0.20, drum: 't' },
+        { time: 1.5,  g: highD, p: lowD, b: 0, dur: 0.20, drum: 'k' },
+        { time: 1.75, g: highD, p: lowD, b: 0, dur: 0.20, drum: 't' }
+    ];
+
+    const bridgeBar2 = [
+        { time: 0.0,  g: highD, p: lowD, b: 0, dur: 0.20, drum: 'k' },
+        { time: 0.5,  g: highG, p: lowD, b: 0, dur: 0.20, drum: 't' },
+        { time: 1.0,  g: highF, p: lowD, b: 0, dur: 0.20, drum: 'k' },
+        { time: 1.25, g: highD, p: lowD, b: 0, dur: 0.20, drum: 't' },
+        { time: 1.5,  g: highD, p: lowD, b: 0, dur: 0.20, drum: 'k' },
+        { time: 1.75, g: highD, p: lowD, b: 0, dur: 0.20, drum: 't' }
+    ];
+
+    const bridgeBar3 = [
+        { time: 0.0,  g: highF, p: lowF3, b: 0, dur: 0.20, drum: 'k' },
+        { time: 0.5,  g: highF, p: lowF3, b: 0, dur: 0.20, drum: 't' },
+        { time: 1.0,  g: highG, p: 0,     b: 0, dur: 0.20, drum: 'k' },
+        { time: 1.25, g: highF, p: 0,     b: 0, dur: 0.20, drum: 't' },
+        { time: 1.5,  g: highD, p: 0,     b: 0, dur: 0.20, drum: 'k' },
+        { time: 1.75, g: highD, p: 0,     b: 0, dur: 0.20, drum: 't' }
+    ];
+
+    const bridgeBar4 = [
+        { time: 0.0,  g: highD, p: lowG, b: 0, dur: 0.20, drum: 'k' },
+        { time: 0.5,  g: highG, p: lowA, b: 0, dur: 0.20, drum: 't' },
+        { time: 1.0,  g: highF, p: 0,    b: 0, dur: 0.20, drum: 'k' },
+        { time: 1.25, g: highD, p: 0,    b: 0, dur: 0.20, drum: 't' },
+        { time: 1.5,  g: highD, p: 0,    b: 0, dur: 0.20, drum: 'k' },
+        { time: 1.75, g: highD, p: 0,    b: 0, dur: 0.20, drum: 't' }
+    ];
+
+        // Final Closing Piece Bar (Played 2x)
+        const finalPieceEvents = [
+            { time: 0.0,  g: lowB,   p: lowF3,    b: 0, dur: 0.45, drum: 'k' },
+            { time: 0.5,  g: lowB,   p: pianoE4,  b: 0, dur: 0.45, drum: 't' },
+            { time: 1.0,  g: highD,  p: pianoF4,  b: 0, dur: 0.20, drum: 'k' },
+            { time: 1.25, g: noteC4, p: pianoG4,  b: 0, dur: 0.20, drum: 't' },
+            { time: 1.5,  g: lowB,   p: highD,    b: 0, dur: 0.20, drum: 'k' },
+            { time: 1.75, g: noteC4, p: noteC4,   b: 0, dur: 0.20, drum: 't' }
+        ];
+
+        // Full loop sequence arrangement
+        const sequence = [
+            originalBar, originalBar,                            // Original x2
+            swappedBar,  swappedBar,                             // Swapped x2
+            bridgeBar1, bridgeBar2, bridgeBar3, bridgeBar4,   // Brass & Guitar Transition (4x)
+            originalBar, swappedBar, originalBar, swappedBar, // Back-and-forth x2 rounds
+            finalPieceEvents, finalPieceEvents                  // Final piece x2
+        ];
+
+        let currentBarIndex = 0;
+
+        bgMusicInterval = setInterval(() => {
+            if (!isMusicPlaying || audioCtx.state !== 'running') return;
+            
+            const now = audioCtx.currentTime;
+            const activeBar = sequence[currentBarIndex];
+
+            activeBar.forEach(ev => {
+                const startTime = now + ev.time;
+
+                // 1. Guiding Kick & Treble
+                if (ev.drum === 'k') {
+                    let kickOsc = audioCtx.createOscillator();
+                    let kickGain = audioCtx.createGain();
+                    kickOsc.type = 'sine';
+                    kickOsc.frequency.setValueAtTime(130, startTime);
+                    kickOsc.frequency.exponentialRampToValueAtTime(35, startTime + 0.1);
+                    kickGain.gain.setValueAtTime(0.07, startTime);
+                    kickGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.1);
+                    kickOsc.connect(kickGain);
+                    kickGain.connect(audioCtx.destination);
+                    kickOsc.start(startTime);
+                    kickOsc.stop(startTime + 0.1);
+                } else {
+                    let trebOsc = audioCtx.createOscillator();
+                    let trebGain = audioCtx.createGain();
+                    trebOsc.type = 'square';
+                    trebOsc.frequency.setValueAtTime(1000, startTime);
+                    trebOsc.frequency.exponentialRampToValueAtTime(300, startTime + 0.03);
+                    trebGain.gain.setValueAtTime(0.015, startTime);
+                    trebGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.03);
+                    trebOsc.connect(trebGain);
+                    trebGain.connect(audioCtx.destination);
+                    trebOsc.start(startTime);
+                    trebOsc.stop(startTime + 0.03);
+                }
+
+                // 2. Guitar Layer (Sawtooth + Triangle blend)
+                let gOsc1 = audioCtx.createOscillator();
+                let gGain1 = audioCtx.createGain();
+                gOsc1.type = 'sawtooth';
+                gOsc1.frequency.setValueAtTime(ev.g, startTime);
+
+                let gOsc2 = audioCtx.createOscillator();
+                let gGain2 = audioCtx.createGain();
+                gOsc2.type = 'triangle';
+                gOsc2.frequency.setValueAtTime(ev.g, startTime);
+
+                gGain1.gain.setValueAtTime(0.001, startTime);
+                gGain1.gain.linearRampToValueAtTime(0.025, startTime + 0.02);
+                gGain1.gain.exponentialRampToValueAtTime(0.001, startTime + ev.dur);
+
+                gGain2.gain.setValueAtTime(0.001, startTime);
+                gGain2.gain.linearRampToValueAtTime(0.03, startTime + 0.02);
+                gGain2.gain.exponentialRampToValueAtTime(0.001, startTime + ev.dur);
+
+                gOsc1.connect(gGain1);
+                gGain1.connect(audioCtx.destination);
+                gOsc2.connect(gGain2);
+                gGain2.connect(audioCtx.destination);
+                gOsc1.start(startTime);
+                gOsc1.stop(startTime + ev.dur);
+                gOsc2.start(startTime);
+                gOsc2.stop(startTime + ev.dur);
+
+                // 3. Piano Layer
+                let pOsc = audioCtx.createOscillator();
+                let pGain = audioCtx.createGain();
+                pOsc.type = 'triangle';
+                pOsc.frequency.setValueAtTime(ev.p, startTime);
+
+                pGain.gain.setValueAtTime(0.025, startTime);
+                pGain.gain.exponentialRampToValueAtTime(0.001, startTime + ev.dur);
+
+                pOsc.connect(pGain);
+                pGain.connect(audioCtx.destination);
+                pOsc.start(startTime);
+                pOsc.stop(startTime + ev.dur);
+
+                // 4. Brass Layer
+                if (ev.b && ev.b > 0) {
+                    let bOsc = audioCtx.createOscillator();
+                    let bGain = audioCtx.createGain();
+                    bOsc.type = 'square';
+                    bOsc.frequency.setValueAtTime(ev.b, startTime);
+
+                    bGain.gain.setValueAtTime(0.02, startTime);
+                    bGain.gain.exponentialRampToValueAtTime(0.001, startTime + ev.dur);
+
+                    bOsc.connect(bGain);
+                    bGain.connect(audioCtx.destination);
+                    bOsc.start(startTime);
+                    bOsc.stop(startTime + ev.dur);
+                }
+            });
+
+            currentBarIndex = (currentBarIndex + 1) % sequence.length;
+
+        }, 2000); // 2 seconds per bar
+    }
+
+    function toggleMusic() {
+        const btn = document.getElementById('musicToggleBtn');
+        if (isMusicPlaying) {
+            isMusicPlaying = false;
+            if (bgMusicInterval) clearInterval(bgMusicInterval);
+            if (droneOsc) {
+                try { droneOsc.stop(); droneOsc.disconnect(); } catch(e){}
+                droneOsc = null;
+            }
+            if (btn) btn.textContent = "🎵 Music: OFF";
+        } else {
+            startBackgroundMusic(); // Triggers async start
+            if (btn) btn.textContent = "🎵 Music: ON";
         }
     }
 
@@ -635,20 +861,84 @@
         renderReusedTags();
     }
 
-    function toggleMusic() {
-        const btn = document.getElementById('musicToggleBtn');
-        if (isMusicPlaying) {
-            isMusicPlaying = false;
-            if (bgMusicInterval) clearInterval(bgMusicInterval);
-            if (btn) btn.textContent = "🎵 Music: OFF";
-        } else {
-            isMusicPlaying = true;
-            startBackgroundMusic();
-            if (btn) btn.textContent = "🎵 Music: ON";
+    // --- Fantasy Sound Effect Engine ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playSound(type) {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+
+        const now = audioCtx.currentTime;
+
+        if (type === 'magic') {
+            // ✨ Melodic Fantasy Chord Pad (Hint success)
+            [261.63, 329.63, 392.00, 523.25].forEach((freq) => {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now);
+                gain.gain.setValueAtTime(0.001, now);
+                gain.gain.linearRampToValueAtTime(0.08, now + 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.6);
+            });
+        } else if (type === 'coin') {
+            // 🪙 Melodic Success Rise (Correct guess)
+            [440.00, 554.37, 659.25, 880.00].forEach((freq, i) => {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + (i * 0.05));
+                gain.gain.setValueAtTime(0.08, now + (i * 0.05));
+                gain.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.05) + 0.25);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now + (i * 0.05));
+                osc.stop(now + (i * 0.05) + 0.25);
+            });
+        } else if (type === 'sword' || type === 'penalty') {
+            // ⚔️ Muted Low Fantasy Thud (Penalty / Skip)
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(110, now);
+            osc.frequency.exponentialRampToValueAtTime(30, now + 0.25);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.25);
+        } else if (type === 'click') {
+            // 🖱️ Soft Organic Click (UI tap)
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.exponentialRampToValueAtTime(80, now + 0.03);
+            gain.gain.setValueAtTime(0.04, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.03);
         }
     }
 
+    // Attach click sounds to general buttons automatically on load
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => playSound('click'));
+        });
+    });
+
     async function skipTargetWord() {
+        playSound('penalty'); // Play thud on skip (-2 pts)
         const skipBtn = document.getElementById('skipWordBtn');
         if (skipBtn) skipBtn.disabled = true;
 
@@ -663,9 +953,8 @@
                 if (!result.success) {
                     alert(result.error || result.message || "Failed to skip word.");
                 } else {
-                    console.log(`Hinter skipped word: ${result.skipped_word}`);
+                    console.log(`Hinter skipped word: ${result.skipped_word} and rerolled: ${result.new_word}`);
                     if (result.round_complete) {
-                        playSound('penalty'); // ⚔️ Penalty sound for skipping (-2 pts)
                         location.reload();
                     }
                 }
@@ -703,8 +992,9 @@
                     if (!result.success) {
                         alert(result.message || "Invalid hint! Please choose another word.");
                     } else {
+                        playSound('magic'); // ✨ Play melodic chord pad on successful hint!
                         if (inputField) inputField.value = '';
-                        selectedReusedWords = []; 
+                        selectedReusedWords = [];
                         renderReusedTags();
 
                         if (result.hint) {
@@ -754,11 +1044,11 @@
                         alert(result.error || "Guess failed.");
                     } else {
                         if (result.penalty) {
-                            playSound('coin'); // 🪙 Coin jingle!
+                            playSound('penalty'); // ⚔️ Penalty thud for wrong/out-of-turn guess
                             alert("Penalty! -1 point for guessing out of turn or double guessing.");
                         }
                         if (result.correct) {
-                            playSound('penalty'); // ⚔️ Penalty thud!
+                            playSound('coin'); // 🪙 Coin / harp jingle for correct guess!
                             console.log("Correct guess registered!");
                         }
                     }
@@ -771,302 +1061,170 @@
         }
     }
 
+    // --- Polling Loop (Runs every 2 seconds) ---
     setInterval(async () => {
-    try {
-        let response = await fetch(`/room/${roomCode}/api/status`);
-        if (!response.ok) return;
-        
-        let data = await response.json();
+        try {
+            let response = await fetch(`/room/${roomCode}/api/status`);
+            if (!response.ok) return;
+            
+            let data = await response.json();
 
-        if (initialStatus === "waiting" && data.status === "in_game") {
-            window.location.reload();
-            return;
-        }
-
-        if (window.lastWordIndex === 0 && data.current_word_index > 0) {
-            window.lastWordIndex = data.current_word_index;
-        }
-        if (window.lastRound === 1 && data.current_round > 1) {
-            window.lastRound = data.current_round;
-        }
-
-        if (data.status === "game_over") {
-            window.location.href = `/room/${roomCode}/victory`;
-            return;
-        }
-
-        if (data.status === "in_game") {
-            if (data.current_word_index < window.lastWordIndex || data.current_round > window.lastRound) {
+            if (initialStatus === "waiting" && data.status === "in_game") {
                 window.location.reload();
                 return;
             }
-        }
 
-        let statusDisplay = document.getElementById("roomStatusDisplay");
-        if (statusDisplay) {
-            statusDisplay.textContent = data.status.toUpperCase();
-        }
+            if (window.lastWordIndex === 0 && data.current_word_index > 0) {
+                window.lastWordIndex = data.current_word_index;
+            }
+            if (window.lastRound === 1 && data.current_round > 1) {
+                window.lastRound = data.current_round;
+            }
 
-        // Update the 40-box hint grid dynamically
-        if (data.hint_boxes) {
-            const isHinter = checkIsHinter();
-            data.hint_boxes.forEach((hintText, index) => {
-                let boxNum = index + 1;
-                let boxElement = document.getElementById(`grid-box-${boxNum}`);
-                if (boxElement) {
-                    let textDiv = boxElement.querySelector('.grid-text');
-                    if (textDiv && hintText && hintText.trim() !== "") {
-                        textDiv.textContent = hintText;
-                        boxElement.classList.remove('empty');
-                        boxElement.classList.add('filled');
-                        
-                        if (isHinter) {
-                            boxElement.style.cursor = 'pointer';
-                            boxElement.onclick = () => {
-                                if (hintText) {
-                                    let wordsInBox = hintText.split(/\s+/);
-                                    wordsInBox.forEach(word => {
-                                        if (word && !selectedReusedWords.includes(word)) {
-                                            selectedReusedWords.push(word);
-                                        }
-                                    });
-                                    renderReusedTags();
-                                }
-                            };
+            if (data.status === "game_over") {
+                window.location.href = `/room/${roomCode}/victory`;
+                return;
+            }
+
+            if (data.status === "in_game") {
+                if (data.current_word_index < window.lastWordIndex || data.current_round > window.lastRound) {
+                    window.location.reload();
+                    return;
+                }
+            }
+
+            let statusDisplay = document.getElementById("roomStatusDisplay");
+            if (statusDisplay) {
+                statusDisplay.textContent = data.status.toUpperCase();
+            }
+
+            // Update the 40-box hint grid dynamically
+            if (data.hint_boxes) {
+                const isHinter = checkIsHinter();
+                data.hint_boxes.forEach((hintText, index) => {
+                    let boxNum = index + 1;
+                    let boxElement = document.getElementById(`grid-box-${boxNum}`);
+                    if (boxElement) {
+                        let textDiv = boxElement.querySelector('.grid-text');
+                        if (textDiv && hintText && hintText.trim() !== "") {
+                            textDiv.textContent = hintText;
+                            boxElement.classList.remove('empty');
+                            boxElement.classList.add('filled');
+                            
+                            if (isHinter) {
+                                boxElement.style.cursor = 'pointer';
+                                boxElement.onclick = () => {
+                                    if (hintText) {
+                                        let wordsInBox = hintText.split(/\s+/);
+                                        wordsInBox.forEach(word => {
+                                            if (word && !selectedReusedWords.includes(word)) {
+                                                selectedReusedWords.push(word);
+                                            }
+                                        });
+                                        renderReusedTags();
+                                    }
+                                };
+                            }
+                        } else if (textDiv) {
+                            textDiv.textContent = "";
+                            boxElement.classList.remove('filled');
+                            boxElement.classList.add('empty');
+                            boxElement.style.cursor = 'default';
+                            boxElement.onclick = null;
                         }
-                    } else if (textDiv) {
-                        textDiv.textContent = "";
-                        boxElement.classList.remove('filled');
-                        boxElement.classList.add('empty');
-                        boxElement.style.cursor = 'default';
-                        boxElement.onclick = null;
                     }
-                }
-            });
-        }
-
-        // Update Latest Hint Display using the stored full hint phrase from the server
-        let latestHintDisplay = document.getElementById('latestHintDisplay');
-        if (latestHintDisplay) {
-            if (data.latest_hint && data.latest_hint.trim() !== "") {
-                latestHintDisplay.textContent = data.latest_hint;
-            } else {
-                latestHintDisplay.textContent = "Waiting for hinter's clue...";
+                });
             }
-        }
 
-        // Dynamically update the Hinter's Target Words sidebar list
-        let targetListContainer = document.getElementById('targetListContainer');
-        if (targetListContainer && data.target_words && data.target_words.length > 0) {
-            const currentIdx = data.current_word_index;
-            const solvedWords = data.solved_words || [];
-
-            targetListContainer.innerHTML = data.target_words.map((target, idx) => {
-                const isSolved = solvedWords.includes(target);
-                const isActive = (idx === currentIdx && !isSolved);
-
-                let statusBg = "#333";
-                let statusColor = "#aaa";
-                let statusText = "Unsolved";
-                let itemBorder = "1px solid #333";
-
-                if (isSolved) {
-                    statusBg = "rgba(40, 167, 69, 0.2)";
-                    statusColor = "#28a745";
-                    statusText = "Solved ✓";
-                    itemBorder = "1px solid #28a745";
-                } else if (isActive) {
-                    statusBg = "rgba(255, 204, 0, 0.1)";
-                    statusColor = "#ffcc00";
-                    statusText = "Active ➔";
-                    itemBorder = "2px solid #ffcc00";
+            // Update Latest Hint Display using stored full hint phrase
+            let latestHintDisplay = document.getElementById('latestHintDisplay');
+            if (latestHintDisplay) {
+                if (data.latest_hint && data.latest_hint.trim() !== "") {
+                    latestHintDisplay.textContent = data.latest_hint;
+                } else {
+                    latestHintDisplay.textContent = "Waiting for hinter's clue...";
                 }
+            }
 
-                return `
-                    <div class="target-item" style="border: ${itemBorder}; background-color: ${statusBg}; display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px;">
-                        <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
-                            <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">${idx + 1}</span>
-                            <span class="target-text" style="background: transparent !important; color: #fff !important; font-size: 0.9rem; font-weight: bold;">${target}</span>
+            // Dynamically update Target Words sidebar list
+            let targetListContainer = document.getElementById('targetListContainer');
+            if (targetListContainer && data.target_words && data.target_words.length > 0) {
+                const currentIdx = data.current_word_index;
+                const solvedWords = data.solved_words || [];
+
+                targetListContainer.innerHTML = data.target_words.map((target, idx) => {
+                    const isSolved = solvedWords.includes(target);
+                    const isActive = (idx === currentIdx && !isSolved);
+
+                    let statusBg = "#333";
+                    let statusColor = "#aaa";
+                    let statusText = "Unsolved";
+                    let itemBorder = "1px solid #333";
+
+                    if (isSolved) {
+                        statusBg = "rgba(40, 167, 69, 0.2)";
+                        statusColor = "#28a745";
+                        statusText = "Solved ✓";
+                        itemBorder = "1px solid #28a745";
+                    } else if (isActive) {
+                        statusBg = "rgba(255, 204, 0, 0.1)";
+                        statusColor = "#ffcc00";
+                        statusText = "Active ➔";
+                        itemBorder = "2px solid #ffcc00";
+                    }
+
+                    return `
+                        <div class="target-item" style="border: ${itemBorder}; background-color: ${statusBg}; display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 6px;">
+                            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
+                                <span class="target-number" style="color: #888; font-size: 0.85rem; font-weight: bold;">${idx + 1}</span>
+                                <span class="target-text" style="background: transparent !important; color: #fff !important; font-size: 0.9rem; font-weight: bold;">${target}</span>
+                            </div>
+                            <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${statusBg}; color: ${statusColor};">${statusText}</span>
                         </div>
-                        <span class="target-status" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${statusBg}; color: ${statusColor};">${statusText}</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        // Update Solved Words list for Guessers on the right sidebar
-        let solvedContainer = document.getElementById('solvedWordsContainer');
-        if (solvedContainer && data.solved_words) {
-            solvedContainer.innerHTML = data.solved_words.map((word, idx) => `
-                <div style="background: #2a2a2a; padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; color: #28a745; font-weight: bold;">
-                    ${idx + 1}. ${word}
-                </div>
-            `).join('');
-        }
-
-        // Update player bar container including live guess pop-ups
-        let playerContainer = document.querySelector(".player-bar-container");
-        if (playerContainer && data.players) {
-            playerContainer.innerHTML = data.players.map((p, idx) => `
-                <div class="player-card ${p.is_hinter ? 'hinter' : ''}" id="player-card-${idx + 1}">
-                    <div class="crown-icon">👑</div>
-                    <div class="player-avatar-box">
-                        <img src="${p.icon}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.replaceWith('👤')" />
-                    </div>
-                    <div class="player-info">
-                        <span class="player-name-display">${p.name}</span>
-                        <span class="player-score-display">Score: ${p.score}</span>
-                    </div>
-                    ${!p.is_hinter ? `
-                    <div class="player-guess-box" id="guess-box-${idx + 1}">
-                        <span class="guess-text">${p.last_guess || 'Waiting...'}</span>
-                    </div>` : ''}
-                </div>
-            `).join('');
-        }
-
-        // Toggle Skip button visibility dynamically based on hinter status updates
-        const isHinterNow = checkIsHinter();
-        const skipBtn = document.getElementById('skipWordBtn');
-        if (skipBtn) {
-            skipBtn.style.display = isHinterNow ? 'block' : 'none';
-        }
-
-        // --- Fantasy Sound Effect Engine ---
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-        function playSound(type) {
-            if (!audioCtx) return;
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
+                    `;
+                }).join('');
             }
 
-            const now = audioCtx.currentTime;
-
-            if (type === 'magic') {
-                // ✨ Magical Chime / Hint Accepted (Sparkling ascending arpeggio)
-                [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
-                    let osc = audioCtx.createOscillator();
-                    let gain = audioCtx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(freq, now + i * 0.06);
-                    gain.gain.setValueAtTime(0.15, now + i * 0.06);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.25);
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    osc.start(now + i * 0.06);
-                    osc.stop(now + i * 0.06 + 0.25);
-                });
-            } else if (type === 'coin') {
-                // 🪙 Victory / Correct Guess Coin Jingle
-                [987.77, 1318.51].forEach((freq, i) => {
-                    let osc = audioCtx.createOscillator();
-                    let gain = audioCtx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(freq, now + i * 0.09);
-                    gain.gain.setValueAtTime(0.2, now + i * 0.09);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.3);
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    osc.start(now + i * 0.09);
-                    osc.stop(now + i * 0.09 + 0.3);
-                });
-            } else if (type === 'sword' || type === 'penalty') {
-                // ⚔️ Sword Slash / Penalty Thud
-                let osc = audioCtx.createOscillator();
-                let gain = audioCtx.createGain();
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(150, now);
-                osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
-                gain.gain.setValueAtTime(0.2, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start(now);
-                osc.stop(now + 0.15);
-            } else if (type === 'click') {
-                // 🖱️ Crisp UI Menu Click
-                let osc = audioCtx.createOscillator();
-                let gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(800, now);
-                gain.gain.setValueAtTime(0.05, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start(now);
-                osc.stop(now + 0.04);
+            // Update Solved Words list for Guessers on right sidebar
+            let solvedContainer = document.getElementById('solvedWordsContainer');
+            if (solvedContainer && data.solved_words) {
+                solvedContainer.innerHTML = data.solved_words.map((word, idx) => `
+                    <div style="background: #2a2a2a; padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; color: #28a745; font-weight: bold;">
+                        ${idx + 1}. ${word}
+                    </div>
+                `).join('');
             }
-        }
 
-        // --- Retro Game Background Music Loop ---
-        let bgMusicInterval = null;
-        let isMusicPlaying = false;
-
-        function startBackgroundMusic() {
-            if (isMusicPlaying || !audioCtx) return;
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
+            // Update player bar container including live guess pop-ups
+            let playerContainer = document.querySelector(".player-bar-container");
+            if (playerContainer && data.players) {
+                playerContainer.innerHTML = data.players.map((p, idx) => `
+                    <div class="player-card ${p.is_hinter ? 'hinter' : ''}" id="player-card-${idx + 1}">
+                        <div class="crown-icon">👑</div>
+                        <div class="player-avatar-box">
+                            <img src="${p.icon}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.replaceWith('👤')" />
+                        </div>
+                        <div class="player-info">
+                            <span class="player-name-display">${p.name}</span>
+                            <span class="player-score-display">Score: ${p.score}</span>
+                        </div>
+                        ${!p.is_hinter ? `
+                        <div class="player-guess-box" id="guess-box-${idx + 1}">
+                            <span class="guess-text">${p.last_guess || 'Waiting...'}</span>
+                        </div>` : ''}
+                    </div>
+                `).join('');
             }
-            isMusicPlaying = true;
 
-            // A peaceful, looping fantasy/Pokémon route-inspired chiptune arpeggio progression
-            const chordProgression = [
-                [523.25, 659.25, 783.99, 1046.50], // C Major
-                [440.00, 523.25, 659.25, 880.00], // A Minor
-                [349.23, 440.00, 523.25, 698.46], // F Major
-                [392.00, 493.88, 587.33, 783.99]  // G Major
-            ];
+            // Toggle Skip button visibility dynamically
+            const isHinterNow = checkIsHinter();
+            const skipBtn = document.getElementById('skipWordBtn');
+            if (skipBtn) {
+                skipBtn.style.display = isHinterNow ? 'block' : 'none';
+            }
 
-            let chordIndex = 0;
-
-            bgMusicInterval = setInterval(() => {
-                if (!isMusicPlaying || audioCtx.state !== 'running') return;
-                
-                const now = audioCtx.currentTime;
-                const currentChord = chordProgression[chordIndex];
-
-                // Play gentle arpeggio notes for the active chord
-                currentChord.forEach((freq, i) => {
-                    let osc = audioCtx.createOscillator();
-                    let gain = audioCtx.createGain();
-                    
-                    // Triangle/Sine mix gives a softer, pleasant background synth pad feel
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(freq, now + (i * 0.18));
-
-                    gain.gain.setValueAtTime(0.03, now + (i * 0.18)); // Kept very quiet so it's non-intrusive
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.18) + 0.35);
-
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-
-                    osc.start(now + (i * 0.18));
-                    osc.stop(now + (i * 0.18) + 0.35);
-                });
-
-                chordIndex = (chordIndex + 1) % chordProgression.length;
-            }, 1500); // Cycles every 1.5 seconds per chord
+        } catch (err) {
+            console.log("Polling error suppressed:", err);
         }
-
-        // Automatically start background music on the first user click or keystroke (satisfying browser autoplay policies)
-        document.addEventListener('pointerdown', () => {
-            startBackgroundMusic();
-        }, { once: true });
-
-        document.addEventListener('keydown', () => {
-            startBackgroundMusic();
-        }, { once: true });
-
-        // Attach click sounds to general buttons automatically
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('button').forEach(btn => {
-                btn.addEventListener('click', () => playSound('click'));
-            });
-        });
-
-    } catch (err) {
-        console.error("Error polling room status:", err);
-    }
-}, 2000);
+    }, 2000);
 </script>

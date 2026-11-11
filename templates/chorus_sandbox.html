@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PokeHints Chord Sandbox</title>
+    <style>
+        body { background: #1a1a1a; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; gap: 20px; }
+        .preset-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; max-width: 500px; width: 100%; }
+        button { background: #2a2a2a; color: #ffcc00; border: 2px solid #444; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        button:hover { background: #333; border-color: #ffcc00; }
+    </style>
+</head>
+<body>
+
+    <h2>🎵 PokeHints Chord Sandbox</h2>
+    <p style="color: #aaa;">Click a preset to preview its mood and rhythm:</p>
+
+    <div class="preset-grid">
+        <button onclick="previewPreset('nostalgic_route')">1. Nostalgic Route<br><span style="font-size:0.8rem; color:#888;">C Maj → A Min → F Maj → G Maj</span></button>
+        <button onclick="previewPreset('mysterious_forest')">2. Mysterious Forest<br><span style="font-size:0.8rem; color:#888;">A Min → D Min → E Maj → A Min</span></button>
+        <button onclick="previewPreset('pokemon_center')">3. Cozy Pokémon Center<br><span style="font-size:0.8rem; color:#888;">F Maj → G Maj → E Min → A Min</span></button>
+        <button onclick="previewPreset('victory_road')">4. Triumphant Climb<br><span style="font-size:0.8rem; color:#888;">D Min → G Maj → C Maj → A Maj</span></button>
+    </div>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        const presets = {
+            nostalgic_route: [
+                [523.25, 659.25, 783.99, 1046.50], // C
+                [440.00, 523.25, 659.25, 880.00],  // Am
+                [349.23, 440.00, 523.25, 698.46],  // F
+                [392.00, 493.88, 587.33, 783.99]   // G
+            ],
+            mysterious_forest: [
+                [440.00, 523.25, 659.25, 880.00],  // Am
+                [293.66, 349.23, 440.00, 587.33],  // Dm
+                [329.63, 415.30, 493.88, 659.25],  // E
+                [440.00, 523.25, 659.25, 880.00]   // Am
+            ],
+            pokemon_center: [
+                [349.23, 440.00, 523.25, 698.46],  // F
+                [392.00, 493.88, 587.33, 783.99],  // G
+                [329.63, 392.00, 493.88, 659.25],  // Em
+                [440.00, 523.25, 659.25, 880.00]   // Am
+            ],
+            victory_road: [
+                [293.66, 349.23, 440.00, 587.33],  // Dm
+                [392.00, 493.88, 587.33, 783.99],  // G
+                [523.25, 659.25, 783.99, 1046.50], // C
+                [440.00, 554.37, 659.25, 880.00]   // A
+            ]
+        };
+
+        function previewPreset(name) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const chords = presets[name];
+            let chordIndex = 0;
+
+            // Play through the 4-chord progression once
+            const interval = setInterval(() => {
+                if (chordIndex >= chords.length) {
+                    clearInterval(interval);
+                    return;
+                }
+
+                const now = audioCtx.currentTime;
+                const currentChord = chords[chordIndex];
+                const rhythmOffsets = [0.0, 0.6, 1.2, 1.9, 2.5, 3.1, 3.8, 4.4];
+                const noteSequence = [
+                    currentChord[0], currentChord[1], currentChord[2], currentChord[3],
+                    currentChord[2], currentChord[1], currentChord[0], currentChord[1]
+                ];
+
+                noteSequence.forEach((freq, i) => {
+                    let osc = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    const startTime = now + rhythmOffsets[i];
+                    
+                    osc.frequency.setValueAtTime(freq, startTime);
+                    gain.gain.setValueAtTime(0.025, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.55);
+
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.55);
+                });
+
+                chordIndex++;
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

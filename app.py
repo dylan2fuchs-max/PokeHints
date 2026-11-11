@@ -4,7 +4,7 @@ import random
 import string
 import uuid
 import re
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for, render_template_string
 
 app = Flask(__name__)
 app.secret_key = (
@@ -168,6 +168,10 @@ def rotate_hinter_or_advance_round(room, room_code):
 def index():
   """Main Menu: Choose from Public Lobby, Host Private, or Join Private."""
   return render_template("index.html")
+
+@app.route('/sandbox')
+def chord_sandbox():
+    return render_template('chorus_sandbox.html')
 
 
 @app.route("/lobby/public", methods=["POST"])
