@@ -358,11 +358,16 @@
     <div class="room-header">
         <div class="room-title">PokeHints | Lobby Code: <span style="color:#fff;">{{ room_code }}</span></div>
         <div style="display: flex; gap: 15px; align-items: center; font-size: 0.9rem;">
+            
+            <!-- ⏱️ New Hinter Countdown Timer Display -->
+            <div style="background: #111; border: 1px solid #444; padding: 4px 10px; border-radius: 4px;">
+                Hinter Timer: <span id="hinterTimerDisplay" style="color: #ff9900; font-weight: bold;">30s</span>
+            </div>
+
             <button type="button" onclick="toggleMusic()" id="musicToggleBtn" style="background: #222; border: 1px solid #444; color: #ffcc00; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold;">
                 🎵 Music: OFF
             </button>
             
-            <!-- 🚪 New Leave Game Button -->
             <a href="{{ url_for('leave_room', room_code=room_code) }}" onclick="return confirm('Are you sure you want to leave the game?');" style="background: #a72828; border: 1px solid #d9534f; color: #fff; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.8rem; font-weight: bold; cursor: pointer;">
                 🚪 Leave
             </a>
@@ -1125,6 +1130,20 @@
             if (statusDisplay) {
                 statusDisplay.textContent = data.status.toUpperCase();
             }
+
+            // --- ⏱️ UPDATE HINTER COUNTDOWN TIMER ---
+            const timerDisplay = document.getElementById('hinterTimerDisplay');
+            if (timerDisplay && data.hinter_time_remaining !== undefined) {
+                timerDisplay.textContent = `${data.hinter_time_remaining}s`;
+                
+                // Turn text bright red when 5 seconds or less remain
+                if (data.hinter_time_remaining <= 5) {
+                    timerDisplay.style.color = '#ff3333';
+                } else {
+                    timerDisplay.style.color = '#ff9900';
+                }
+            }
+            // ----------------------------------------
 
             // Update the 40-box hint grid dynamically
             if (data.hint_boxes) {

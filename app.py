@@ -74,12 +74,14 @@ def start_game_session(room, room_code):
     print(f"========================================\n")
 
 def init_game_grid(room):
-    """Initializes the 40-box grid, target tracking, and resets the hinter's unlocked word bank for a new turn."""
+    """Initializes the 40-box grid, target tracking, and resets the hinter's unlocked word bank and clue streak for a new turn."""
     room["hint_boxes"] = ["" for _ in range(40)]  # 40 sequential hint boxes
     room["current_box_index"] = 0                # Tracks next available box (0 to 39)
     room["solved_words"] = []                    # Stores successfully solved words in numeric order
     room["current_word_index"] = 0               # Index of the active target word (0 to 9)
     room["hinter_words"] = set()                 # FRESH hinter vocabulary bank for this new turn/hinter!
+    room["hinter_clue_streak"] = 0               # Resets the 3-clue streak counter for the new target word
+    room["hinter_timer_start"] = time.time()
 
 def calculate_hinter_score(boxes_used):
     """
@@ -259,6 +261,7 @@ def host_private_lobby():
         max_players = int(request.form.get("max_players", 4))
         rounds = int(request.form.get("rounds", 1))
         allow_wiki = request.form.get("allow_wiki") == "true"
+        competitive_timer = request.form.get("competitive_timer") == "true"
         host_name = request.form.get("player_name", "HostTrainer")
         player_icon = request.form.get("player_icon", url_for('static', filename='Default 1.png'))
         if player_icon == "custom":
@@ -281,6 +284,7 @@ def host_private_lobby():
             "max_players": max_players,
             "status": "waiting",
             "allow_wiki": allow_wiki,  # Optional for private games
+            "competitive_timer": competitive_timer,
         }
 
         session["room_code"] = room_code
@@ -360,6 +364,46 @@ def room_status(room_code):
         print(f"[WATCHDOG] Room '{room_code}' is full ({len(room['players'])}/{room['max_players']}) but still waiting. Forcing game start!")
         start_game_session(room, room_code)
 
+    # WATCHDOG GUARD 2: HINTER 30-SECOND TIMEOUT CHECK (Only if Competitive Mode is ON)
+    if room.get("competitive_timer", False) and room["status"] == "in_game":
+        timer_start = room.get("hinter_timer_start", 0)
+        if timer_start and (time.time() - timer_start > 30):
+            print(f"\n[HINTER TIMEOUT] Competitive timer triggered in room '{room_code}'!\n")
+            
+            # 1. Each guesser gets a point
+            for p in room["players"]:
+                if not p.get("is_hinter"):
+                    p["score"] += 1
+
+            # 2. Punish hinter by filling 4 boxes on the 40-grid
+            for _ in range(4):
+                box_idx = room.get("current_box_index", 0)
+                if box_idx < 40:
+                    room["hint_boxes"][box_idx] = "(TIMEOUT)"
+                    room["current_box_index"] = box_idx + 1
+
+            # 3. Advance past the failed word
+            target_words = room.get("target_words", [])
+            current_idx = room.get("current_word_index", 0)
+            if current_idx < len(target_words):
+                failed_word = target_words[current_idx]
+                solved_words = room.setdefault("solved_words", [])
+                solved_words.append(f"{failed_word} (Timed Out)")
+
+                room["current_word_index"] += 1
+                room["hinter_clue_streak"] = 0
+                room["hinter_timer_start"] = time.time()
+
+                if room["current_word_index"] >= len(target_words):
+                    current_hinter = next((p for p in room["players"] if p.get("is_hinter")), None)
+                    if current_hinter:
+                        finalize_hinter_turn(room, current_hinter)
+                    rotate_hinter_or_advance_round(room, room_code)
+
+    # Calculate remaining time for the frontend timer display
+    timer_start = room.get("hinter_timer_start", time.time())
+    time_remaining = max(0, int(30 - (time.time() - timer_start)))
+
     return jsonify({
         "status": room["status"],
         "players": room["players"],
@@ -373,6 +417,7 @@ def room_status(room_code):
         "solved_words": room.get("solved_words", []),
         "hint_boxes": room.get("hint_boxes", [""] * 40),
         "latest_hint": room.get("latest_hint", "")
+        "hinter_time_remaining": time_remaining
     })
 
 from flask import request, jsonify, session
@@ -479,6 +524,8 @@ def submit_guess(room_code):
                 p.pop("last_guessed_box", None)
 
             room["current_word_index"] += 1
+            room["hinter_clue_streak"] = 0  # <--- Reset the 3-clue counter for the new word!
+            room["hinter_timer_start"] = time.time()
             response_data["next_word_index"] = room["current_word_index"]
 
             if room["current_word_index"] >= len(target_words):
@@ -543,7 +590,7 @@ def current_hinter_lookup(room):
             return p
     return room["players"][0]
 
-CURSE_WORDS = {"damn", "hell", "shit", "fuck", "bitch", "ass", "crap", "bastard", "abortion", "racism", "asexual", "bisexual", "gay", "stupid", "lgbtq", "lesbian", "dump", "jerk", "opioids", "rape", "cum", "orgasm"}
+CURSE_WORDS = {"damn", "hell", "shit", "fuck", "bitch", "ass", "crap", "bastard", "abortion", "racism", "asexual", "bisexual", "gay", "stupid", "penis", "lgbtq", "lesbian", "dump", "jerk", "opioids", "rape", "cum", "orgasm", "dick"}
 
 @app.route("/room/<room_code>/hint", methods=["POST"])
 def submit_hint(room_code):
@@ -587,6 +634,18 @@ def submit_hint(room_code):
     # Identify unique new words in this specific hint
     unique_new_words = set(w for w in hint_words if w not in unlocked_words)
 
+    # --- NEW RULE: 3-CLUE STREAK CHECK ---
+    # Track how many hints have been given for the current target word without a correct guess
+    clue_streak = room.get("hinter_clue_streak", 0)
+
+    if clue_streak >= 2:  # This is the 3rd clue (0-indexed: 0, 1, 2)
+        if len(unique_new_words) == 0:
+            return jsonify({
+                "success": False, 
+                "message": "Rule check! That's your 3rd hint for this word without a guess. You MUST introduce at least ONE brand new word to the 40-grid!"
+            })
+    # -------------------------------------
+
     # Enforce the 1-new-word rule per hint submission
     if len(unique_new_words) > 1:
         return jsonify({
@@ -611,16 +670,22 @@ def submit_hint(room_code):
                 "message": f"Invalid hint! '{matched_word}' is part of the active target word."
             })
 
-    added = add_new_words_to_grid(room, list(unique_new_words))
-    if not added:
-        return jsonify({"success": False, "message": "All 40 grid boxes for new words are full!"})
+    # If they successfully add a new word, attempt to grid it
+    if len(unique_new_words) == 1:
+        added = add_new_words_to_grid(room, list(unique_new_words))
+        if not added:
+            return jsonify({"success": False, "message": "All 40 grid boxes for new words are full!"})
 
     # Permanently unlock the word into the hinter's word list
     for w in unique_new_words:
         room["hinter_words"].add(w)
 
+    # Increment the clue streak since a hint was accepted without a correct guess yet
+    room["hinter_clue_streak"] = clue_streak + 1
+
     # SAVE THE FULL PHRASE SO THE POLL DOESN'T OVERWRITE IT
     room["latest_hint"] = hint_phrase
+    room["hinter_timer_start"] = time.time()
 
     print(f"[HINT ACCEPTED] Room {room_code} | Message Shared: '{hint_phrase}' | New Word Added to Grid: {list(unique_new_words)}")
     
