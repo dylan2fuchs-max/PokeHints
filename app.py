@@ -4,6 +4,7 @@ import random
 import string
 import uuid
 import re
+import time
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for, render_template_string
 
 app = Flask(__name__)
@@ -376,9 +377,11 @@ def room_status(room_code):
 
 from flask import request, jsonify, session
 
+import time
+
 @app.route("/room/<room_code>/guess", methods=["POST"])
 def submit_guess(room_code):
-    """Receives a player's guess, validates it against the active target word, and handles penalties/popups."""
+    """Receives a player's guess, validates it against active or recently tied words, and handles points."""
     room = LOBBIES.get(room_code)
     if not room:
         return jsonify({"success": False, "error": "Room not found"}), 404
@@ -409,20 +412,7 @@ def submit_guess(room_code):
     # Store latest guess for live pop-up display on player card
     current_player["last_guess"] = guessed_word
 
-    # Track current box index for double-guess / out-of-turn penalty checks
-    current_box = room.get("current_box_index", 0)
-    penalty_applied = False
-
-    if current_box == 0:
-        current_player["score"] -= 1
-        penalty_applied = True
-    elif current_player.get("last_guessed_box") == current_box:
-        current_player["score"] -= 1
-        penalty_applied = True
-    else:
-        current_player["last_guessed_box"] = current_box
-
-    # Find current target word
+    # Find current target word & check for a 0.1s tie FIRST
     target_words = room.get("target_words", [])
     current_idx = room.get("current_word_index", 0)
 
@@ -430,7 +420,35 @@ def submit_guess(room_code):
         return jsonify({"success": False, "error": "All words have been guessed!"}), 400
 
     active_target = target_words[current_idx]
-    is_correct = False if penalty_applied else (guessed_word.lower() == active_target.strip().lower())
+
+    # TIE CHECK: Did they submit within 0.1 seconds (100ms) of the word just being solved?
+    is_tie_bonus = False
+    last_solved = room.get("last_solved_target")
+    last_time = room.get("last_solved_time", 0)
+    
+    if last_solved and (time.time() - last_time < 0.1):
+        if guessed_word.lower() == last_solved.strip().lower():
+            is_tie_bonus = True
+
+    # If it's a tie bonus, bypass penalties and count it as correct!
+    if is_tie_bonus:
+        is_correct = True
+        penalty_applied = False
+    else:
+        # Track current box index for double-guess / out-of-turn penalty checks
+        current_box = room.get("current_box_index", 0)
+        penalty_applied = False
+
+        if current_box == 0:
+            current_player["score"] -= 1
+            penalty_applied = True
+        elif current_player.get("last_guessed_box") == current_box:
+            current_player["score"] -= 1
+            penalty_applied = True
+        else:
+            current_player["last_guessed_box"] = current_box
+
+        is_correct = False if penalty_applied else (guessed_word.lower() == active_target.strip().lower())
 
     response_data = {
         "success": True,
@@ -442,29 +460,61 @@ def submit_guess(room_code):
     if is_correct:
         current_player["score"] += 1
 
-        solved_words = room.setdefault("solved_words", [])
-        if active_target not in solved_words:
-            solved_words.append(active_target)
+        if not is_tie_bonus:
+            # FIRST SOLVER: Advances the board, logs the solve timestamp, and increments index
+            solved_words = room.setdefault("solved_words", [])
+            if active_target not in solved_words:
+                solved_words.append(active_target)
 
-        # Reset box guess tracking across players efficiently
-        if isinstance(players_data, dict):
-            iter_players = players_data.values()
+            # Record this word and time for subsequent tie checks (< 0.1s)
+            room["last_solved_target"] = active_target
+            room["last_solved_time"] = time.time()
+
+            if isinstance(players_data, dict):
+                iter_players = players_data.values()
+            else:
+                iter_players = players_data
+
+            for p in iter_players:
+                p.pop("last_guessed_box", None)
+
+            room["current_word_index"] += 1
+            response_data["next_word_index"] = room["current_word_index"]
+
+            if room["current_word_index"] >= len(target_words):
+                response_data["round_complete"] = True
+                finalize_hinter_turn(room, current_hinter_lookup(room))
+                rotate_hinter_or_advance_round(room, room_code)
+                response_data["game_status"] = room["status"]
         else:
-            iter_players = players_data
-
-        for p in iter_players:
-            p.pop("last_guessed_box", None)
-
-        room["current_word_index"] += 1
-        response_data["next_word_index"] = room["current_word_index"]
-
-        if room["current_word_index"] >= len(target_words):
-            response_data["round_complete"] = True
-            finalize_hinter_turn(room, current_hinter_lookup(room))
-            rotate_hinter_or_advance_round(room, room_code)
-            response_data["game_status"] = room["status"]
+            # TIEING PLAYER: Gets their point awarded without shifting the word index again
+            response_data["next_word_index"] = room["current_word_index"]
+            response_data["tie_bonus"] = True
 
     return jsonify(response_data)
+
+@app.route("/room/<room_code>/leave")
+def leave_room(room_code):
+    """Removes a player from the room and redirects them to the home page."""
+    room, canonical_code = find_room(room_code)
+    if room:
+        current_player_id = session.get("player_id")
+        if current_player_id:
+            # Filter out the leaving player from the list
+            room["players"] = [p for p in room["players"] if p.get("id") != current_player_id and p.get("player_id") != current_player_id]
+            print(f"[LEAVE] Player {session.get('player_name')} left room '{room_code}'. Remaining players: {len(room['players'])}")
+
+            # If the room is now empty, you can clean it up from LOBBIES if you want
+            if len(room["players"]) == 0 and room_code != "PUBLIC_MAIN":
+                LOBBIES.pop(room_code, None)
+                print(f"[CLEANUP] Room '{room_code}' was empty and has been removed.")
+
+    # Clear their session state for this room
+    session.pop("room_code", None)
+    session.pop("player_id", None)
+    session.pop("player_name", None)
+
+    return redirect(url_for("index"))
 
 def add_new_words_to_grid(room, new_words):
     """Adds only the newly unlocked words into the sequential 40-box grid safely if space permits."""

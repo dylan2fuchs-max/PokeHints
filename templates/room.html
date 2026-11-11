@@ -361,6 +361,12 @@
             <button type="button" onclick="toggleMusic()" id="musicToggleBtn" style="background: #222; border: 1px solid #444; color: #ffcc00; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold;">
                 🎵 Music: OFF
             </button>
+            
+            <!-- 🚪 New Leave Game Button -->
+            <a href="{{ url_for('leave_room', room_code=room_code) }}" onclick="return confirm('Are you sure you want to leave the game?');" style="background: #a72828; border: 1px solid #d9534f; color: #fff; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.8rem; font-weight: bold; cursor: pointer;">
+                🚪 Leave
+            </a>
+
             <span style="color: #aaa;">Trainer: <b style="color: #ffcc00;">{{ session.get('player_name', 'Trainer') }}</b></span>
             <div>Status: <span id="roomStatusDisplay" style="color: #28a745; font-weight:bold;">{{ room.status | upper }}</span></div>
         </div>
@@ -458,6 +464,12 @@
         let activeGridBox = 1; // Tracks which grid box to fill next
 
         function submitGuess(event) {
+            // Grab the guess value right from your input field
+            const inputField = document.getElementById('guess-input'); // Update ID if yours is different
+            const guessValue = inputField ? inputField.value.trim() : '';
+
+            if (!guessValue) return;
+
             // Send guess to Flask backend
             fetch('/room/{{ room_code }}/guess', {
                 method: 'POST',
@@ -494,7 +506,7 @@
                 }
 
                 // Clear input for next guess
-                inputField.value = '';
+                if (inputField) inputField.value = '';
             })
             .catch(error => console.error('Error:', error));
         }
@@ -1053,7 +1065,11 @@
                             alert("Penalty! -1 point for guessing out of turn or double guessing.");
                         } else if (result.correct) {
                             playSound('coin'); // 🪙 Coin / harp jingle for correct guess!
-                            console.log("Correct guess registered!");
+                            
+                            // Instantly update the target word index or trigger a manual status fetch
+                            if (typeof fetchRoomStatus === 'function') {
+                                fetchRoomStatus(); // If you have a polling function, call it immediately!
+                            }
                         } else {
                             // Incorrect regular guess sound or subtle feedback if desired
                             playSound('click');
