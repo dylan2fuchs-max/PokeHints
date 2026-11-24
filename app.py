@@ -634,11 +634,13 @@ def _hash_word(word: str) -> str:
     return hashlib.sha256(word.strip().lower().encode("utf-8")).hexdigest()
 
 
-# Populate with SHA-256 hex digests of each blocked word (lowercase):
-# e.g. hashlib.sha256(b"example").hexdigest()
-CURSE_WORD_HASHES = {
-    # "64-char-sha256-hex-digest-here",
-}
+BLOCKED_WORDS_FILE = os.path.join(os.path.dirname(__file__), "blocked_words.txt")
+
+if os.path.exists(BLOCKED_WORDS_FILE):
+    with open(BLOCKED_WORDS_FILE, "r", encoding="utf-8") as f:
+        CURSE_WORDS = {line.strip().lower() for line in f if line.strip()}
+else:
+    CURSE_WORDS = set()
 
 @app.route("/room/<room_code>/hint", methods=["POST"])
 def submit_hint(room_code):
