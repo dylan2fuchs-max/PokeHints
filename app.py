@@ -5,6 +5,7 @@ import string
 import uuid
 import re
 import time
+import hashlib
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for, render_template_string
 
 app = Flask(__name__)
@@ -631,7 +632,15 @@ def current_hinter_lookup(room):
             return p
     return room["players"][0]
 
-CURSE_WORDS = {"damn", "hell", "shit", "fuck", "bitch", "ass", "crap", "bastard", "abortion", "racism", "asexual", "bisexual", "gay", "stupid", "penis", "lgbtq", "lesbian", "dump", "jerk", "opioids", "rape", "cum", "orgasm", "dick"}
+def _hash_word(word: str) -> str:
+    return hashlib.sha256(word.strip().lower().encode("utf-8")).hexdigest()
+
+
+# Populate with SHA-256 hex digests of each blocked word (lowercase):
+# e.g. hashlib.sha256(b"example").hexdigest()
+CURSE_WORD_HASHES = {
+    # "64-char-sha256-hex-digest-here",
+}
 
 @app.route("/room/<room_code>/hint", methods=["POST"])
 def submit_hint(room_code):
