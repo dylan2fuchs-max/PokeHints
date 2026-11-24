@@ -670,9 +670,9 @@ def submit_hint(room_code):
 
     hint_words = [w.lower() for w in hint_phrase.split()]
 
-    # SAFETY CHECK 2: Curse words (hashed check)
+    # SAFETY CHECK 2: Curse words
     for w in hint_words:
-        if _hash_word(w) in CURSE_WORD_HASHES:
+        if w in CURSE_WORDS:
             return jsonify({"success": False, "message": "Keep it clean! That word is not allowed."})
 
     # Ensure hinter word bank exists
