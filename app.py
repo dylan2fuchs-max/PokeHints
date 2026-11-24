@@ -364,17 +364,15 @@ def room_status(room_code):
     if not room:
         return jsonify({"error": "Room not found"}), 404
 
-    room = LOBBIES[room_code]
-
     # WATCHDOG GUARD: UNIVERSAL 30-SECOND TIMER CHECK (Only if Competitive Mode is ON)
     if room.get("competitive_timer", False) and room["status"] == "in_game":
         timer_start = room.get("phase_timer_start", 0)
         phase = room.get("turn_phase", "hinter")
-        
+
         if timer_start and (time.time() - timer_start > 30):
             if phase == "hinter":
-                print(f"\n[HINTER TIMEOUT] Hinter took >30s in room '{room_code}'! Applying penalties.\n")
-                
+                print(f"\n[HINTER TIMEOUT] Hinter took >30s in room '{canonical_code}'! Applying penalties.\n")
+
                 # 1. Each guesser gets a point
                 for p in room["players"]:
                     if not p.get("is_hinter"):
@@ -404,11 +402,11 @@ def room_status(room_code):
                         current_hinter = next((p for p in room["players"] if p.get("is_hinter")), None)
                         if current_hinter:
                             finalize_hinter_turn(room, current_hinter)
-                        rotate_hinter_or_advance_round(room, room_code)
+                        rotate_hinter_or_advance_round(room, canonical_code)
 
             elif phase == "guesser":
-                print(f"\n[GUESSER TIMEOUT] Guessers ran out of time in room '{room_code}'. Returning turn to hinter for another clue.\n")
-                
+                print(f"\n[GUESSER TIMEOUT] Guessers ran out of time in room '{canonical_code}'. Returning turn to hinter for another clue.\n")
+
                 # Guessers ran out of time — loop back to hinter phase for another hint!
                 room["turn_phase"] = "hinter"
                 room["phase_timer_start"] = time.time()
@@ -670,9 +668,9 @@ def submit_hint(room_code):
 
     hint_words = [w.lower() for w in hint_phrase.split()]
 
-    # SAFETY CHECK 2: Curse words
+    # SAFETY CHECK 2: Curse words (hashed check)
     for w in hint_words:
-        if w in CURSE_WORDS:
+        if _hash_word(w) in CURSE_WORD_HASHES:
             return jsonify({"success": False, "message": "Keep it clean! That word is not allowed."})
 
     # Ensure hinter word bank exists
